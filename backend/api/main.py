@@ -33,10 +33,52 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+
 from backend.api.routers import (
     health, predict, model, backtest, trade, admin, paper, stream, market, bot,
     risk, strategy, portfolio, intelligence, options, execution, orchestrator, log,
 )
+
+# ----- Lifespan: auto-download market data & background refresh -----
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Startup / shutdown lifecycle for the FastAPI application."""
+    import threading, logging, tempfile
+    _log = logging.getLogger("stocktrader.startup")
+
+    def _init_data():
+        # Use a file lock so only one Gunicorn worker runs the download
+        lock_path = Path(tempfile.gettempdir()) / "stocktrader_init.lock"
+        try:
+            import sys
+            if sys.platform == "win32":
+                import msvcrt
+                lock_file = open(lock_path, "w")
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                lock_file = open(lock_path, "w")
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except (OSError, IOError):
+            _log.info("Another worker is handling data init — skipping.")
+            return
+
+        try:
+            from backend.services.data_downloader import (
+                get_all_symbols, refresh_all_symbols, start_background_refresh,
+            )
+            symbols = get_all_symbols()
+            _log.info("Auto-downloading data for %d symbols...", len(symbols))
+            results = refresh_all_symbols(symbols)
+            ok = sum(1 for v in results.values() if v)
+            _log.info("Initial download: %d/%d symbols OK", ok, len(results))
+            start_background_refresh(interval_hours=6.0)
+        except Exception as exc:
+            _log.error("Startup data download failed: %s", exc)
+
+    threading.Thread(target=_init_data, name="startup-data-dl", daemon=True).start()
+    yield  # app is running
+    # shutdown: nothing to clean up
 
 app = FastAPI(
     title="StockTrader API",
