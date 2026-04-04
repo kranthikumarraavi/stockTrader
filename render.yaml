@@ -23,7 +23,19 @@ services:
       - key: APP_ENV
         value: production
       - key: ALLOWED_ORIGINS
-        value: "https://your-app.vercel.app"
+        value: "https://stockv3.vercel.app,http://localhost:3000,http://localhost:8000"
+      - key: PAPER_MODE
+        value: "true"
+      - key: ANGEL_API_KEY
+        value: tuI9emOo
+      - key: ANGEL_CLIENT_ID
+        value: AAAE305533
+      - key: ANGEL_MPIN
+        value: 1437
+      - key: ANGEL_TOTP_SECRET
+        value: WT6KB7AKHEREKSSJZQQK2HNC34
+      - key: LOG_LEVEL
+        value: INFO
       - key: MARKET_DATA_URL
         fromService:
           name: stocktrader-market-data
@@ -69,7 +81,7 @@ services:
       - key: APP_ENV
         value: production
       - key: ALLOWED_ORIGINS
-        value: "https://your-app.vercel.app"
+        value: "https://stockv3.vercel.app,http://localhost:3000,http://localhost:8000"
       - key: DATABASE_URL
         fromDatabase:
           name: stocktrader-db
@@ -93,7 +105,43 @@ services:
       - key: APP_ENV
         value: production
       - key: ALLOWED_ORIGINS
-        value: "https://your-app.vercel.app"
+        value: "https://stockv3.vercel.app,http://localhost:3000,http://localhost:8000"
+      - key: SERVICE_PORT
+        value: "8010"
+      - key: DB_ECHO
+        value: "false"
+      - key: REDIS_URL
+        value: ""
+      - key: ANGEL_API_KEY
+        value: ""
+      - key: ANGEL_CLIENT_ID
+        value: ""
+      - key: ANGEL_CLIENT_PIN
+        value: ""
+      - key: ANGEL_TOTP_SECRET
+        value: ""
+      - key: ANGEL_TOKEN_CACHE_PATH
+        value: storage/runtime/angel_tokens.json
+      - key: DATA_PROVIDER
+        value: yahoo
+      - key: NEWS_API_KEY
+        value: ""
+      - key: MODEL_ARTIFACTS_DIR
+        value: storage/models
+      - key: TRAIN_LOOKBACK_DAYS
+        value: "730"
+      - key: TRAIN_VAL_RATIO
+        value: "0.15"
+      - key: TRAIN_TEST_RATIO
+        value: "0.15"
+      - key: TRAIN_EMBARGO_DAYS
+        value: "5"
+      - key: TRAIN_DEFAULT_MODEL
+        value: lightgbm
+      - key: PREDICTION_CONFIDENCE_THRESHOLD
+        value: "0.55"
+      - key: STALE_TICK_SECONDS
+        value: "300"
       - key: DATABASE_URL
         fromDatabase:
           name: stocktrader-db
@@ -115,7 +163,7 @@ services:
       - key: APP_ENV
         value: production
       - key: ALLOWED_ORIGINS
-        value: "https://your-app.vercel.app"
+        value: "https://stockv3.vercel.app,http://localhost:3000,http://localhost:8000"
       - key: DATABASE_URL
         fromDatabase:
           name: stocktrader-db
@@ -139,7 +187,7 @@ services:
       - key: APP_ENV
         value: production
       - key: ALLOWED_ORIGINS
-        value: "https://your-app.vercel.app"
+        value: "https://stockv3.vercel.app,http://localhost:3000,http://localhost:8000"
       - key: DATABASE_URL
         fromDatabase:
           name: stocktrader-db

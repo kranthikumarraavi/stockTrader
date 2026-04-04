@@ -10,7 +10,7 @@ __pycache__/
 venv/
 
 # Environment
-.env
+
 
 # SQLite dev database
 *.db
