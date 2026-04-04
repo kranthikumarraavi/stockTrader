@@ -7,8 +7,8 @@ import { ShellComponent } from './shell/shell.component';
 
 export const routes: Routes = [
   // ── Auth routes (outside shell) ──
-  // { path: 'auth/login', loadComponent: () => import('./pages/login.component').then(m => m.LoginComponent) },
-  // { path: 'auth/callback', loadComponent: () => import('./pages/callback.component').then(m => m.CallbackComponent) },
+  { path: 'auth/login', loadComponent: () => import('./pages/login.component').then(m => m.LoginComponent) },
+  { path: 'auth/callback', loadComponent: () => import('./pages/callback.component').then(m => m.CallbackComponent) },
 
   // ── App shell (all authenticated routes) ──
   {
@@ -117,9 +117,16 @@ export const routes: Routes = [
 
       // System (admin)
       {
-        path: 'admin',
-        loadComponent: () => import('./pages/admin.component').then(m => m.AdminComponent),
+        path: 'system',
+        loadComponent: () => import('./pages/system/system-shell.component').then(m => m.SystemShellComponent),
         canActivate: [authGuard, adminGuard],
+        children: [
+          { path: '', redirectTo: 'models', pathMatch: 'full' },
+          { path: 'models', loadComponent: () => import('./pages/system/sys-models.component').then(m => m.SysModelsComponent) },
+          { path: 'drift', loadComponent: () => import('./pages/system/sys-drift.component').then(m => m.SysDriftComponent) },
+          { path: 'registry', loadComponent: () => import('./pages/system/sys-registry.component').then(m => m.SysRegistryComponent) },
+          { path: 'canary', loadComponent: () => import('./pages/system/sys-canary.component').then(m => m.SysCanaryComponent) },
+        ],
       },
     ],
   },

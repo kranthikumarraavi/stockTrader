@@ -1,8 +1,9 @@
 // Admin page component
 
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subject, takeUntil } from 'rxjs';
 import { AdminApiService, ModelStatus, DriftResult, CanaryStatus, ModelVersion } from '../services/admin-api.service';
 import { AuthService } from '../services/auth.service';
 import { NotificationService } from '../services/notification.service';
@@ -137,7 +138,7 @@ import { NotificationService } from '../services/notification.service';
                 <tr><th>Version</th><th>Created</th><th>Accuracy</th><th>Status</th></tr>
               </thead>
               <tbody>
-                <tr *ngFor="let v of versions">
+                <tr *ngFor="let v of versions; trackBy: trackByVersion">
                   <td class="text-mono"><strong>{{ v.version }}</strong></td>
                   <td>{{ v.created_at | date:'medium' }}</td>
                   <td>{{ v.accuracy !== undefined && v.accuracy !== null ? ((v.accuracy * 100) | number:'1.1-1') + '%' : 'N/A' }}</td>
@@ -196,7 +197,7 @@ import { NotificationService } from '../services/notification.service';
     }
   `]
 })
-export class AdminComponent implements OnInit {
+export class AdminComponent implements OnInit, OnDestroy {
   tokenInput = '';
   activeTab: 'model' | 'drift' | 'registry' | 'canary' = 'model';
 
@@ -215,6 +216,8 @@ export class AdminComponent implements OnInit {
   canary: CanaryStatus | null = null;
   canaryLoading = false;
 
+  private destroy$ = new Subject<void>();
+
   constructor(
     public auth: AuthService,
     private adminApi: AdminApiService,
@@ -223,6 +226,11 @@ export class AdminComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadModelStatus();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   setToken(): void {
@@ -235,7 +243,7 @@ export class AdminComponent implements OnInit {
 
   loadModelStatus(): void {
     this.modelLoading = true;
-    this.adminApi.getModelStatus().subscribe({
+    this.adminApi.getModelStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: s => { this.modelStatus = s; this.modelLoading = false; },
       error: () => { this.modelLoading = false; }
     });
@@ -243,7 +251,7 @@ export class AdminComponent implements OnInit {
 
   reloadModel(): void {
     this.reloading = true;
-    this.adminApi.reloadModel().subscribe({
+    this.adminApi.reloadModel().pipe(takeUntil(this.destroy$)).subscribe({
       next: res => {
         this.reloading = false;
         this.notify.success(res.message);
@@ -255,7 +263,7 @@ export class AdminComponent implements OnInit {
 
   triggerRetrain(): void {
     this.retraining = true;
-    this.adminApi.triggerRetrain().subscribe({
+    this.adminApi.triggerRetrain().pipe(takeUntil(this.destroy$)).subscribe({
       next: () => {
         this.retraining = false;
         this.notify.success('Retrain triggered successfully.');
@@ -268,7 +276,7 @@ export class AdminComponent implements OnInit {
   loadDrift(): void {
     if (this.drift) return;
     this.driftLoading = true;
-    this.adminApi.checkDrift().subscribe({
+    this.adminApi.checkDrift().pipe(takeUntil(this.destroy$)).subscribe({
       next: d => { this.drift = d; this.driftLoading = false; },
       error: () => { this.driftLoading = false; }
     });
@@ -276,7 +284,7 @@ export class AdminComponent implements OnInit {
 
   runDriftCheck(): void {
     this.driftChecking = true;
-    this.adminApi.checkDrift().subscribe({
+    this.adminApi.checkDrift().pipe(takeUntil(this.destroy$)).subscribe({
       next: d => {
         this.drift = d;
         this.driftChecking = false;
@@ -289,7 +297,7 @@ export class AdminComponent implements OnInit {
   loadVersions(): void {
     if (this.versions.length > 0) return;
     this.versionsLoading = true;
-    this.adminApi.getRegistryVersions().subscribe({
+    this.adminApi.getRegistryVersions().pipe(takeUntil(this.destroy$)).subscribe({
       next: v => {
         this.versions = Array.isArray(v) ? v : [];
         this.versionsLoading = false;
@@ -301,9 +309,11 @@ export class AdminComponent implements OnInit {
   loadCanary(): void {
     if (this.canary) return;
     this.canaryLoading = true;
-    this.adminApi.getCanaryStatus().subscribe({
+    this.adminApi.getCanaryStatus().pipe(takeUntil(this.destroy$)).subscribe({
       next: c => { this.canary = c; this.canaryLoading = false; },
       error: () => { this.canaryLoading = false; }
     });
   }
+
+  trackByVersion(_: number, v: ModelVersion): string { return v.version; }
 }

@@ -1,0 +1,296 @@
+<!-- Bot Control Panel — Phase 4.1 -->
+<div class="bp">
+
+  <!-- ── Header ── -->
+  <header class="bp__header">
+    <div>
+      <h1 class="bp__title"><i class="bi bi-robot"></i> Auto-Trading Bot</h1>
+      <p class="bp__subtitle text-muted">Automated trade execution and portfolio management</p>
+    </div>
+    <div class="bp__header-right">
+      <app-state-badge [label]="botStateLabel" [variant]="botStateBadge" />
+      <app-state-badge [label]="sessionLabel" [variant]="sessionBadge" />
+    </div>
+  </header>
+
+  @if (loading) {
+    <app-loading-skeleton shape="card" />
+    <app-loading-skeleton shape="card" />
+  }
+
+  @if (!loading) {
+    <!-- ── Market Status Banner ── -->
+    <div class="bp__market-banner" [ngClass]="{
+        'bp__market-banner--open': market?.phase === 'open',
+        'bp__market-banner--pre': market?.phase === 'pre_open',
+        'bp__market-banner--closed': market?.phase !== 'open' && market?.phase !== 'pre_open'
+    }">
+      <div class="bp__market-left">
+        <span class="bp__market-dot" [ngClass]="{
+            'bp__market-dot--open': market?.phase === 'open',
+            'bp__market-dot--pre': market?.phase === 'pre_open'
+        }"></span>
+        <div>
+          <strong>{{ market?.message || 'Loading…' }}</strong>
+          <div class="text-muted" style="font-size:0.8125rem;">{{ market?.ist_now }}</div>
+        </div>
+      </div>
+      <div class="bp__market-right">
+        <span class="text-muted" style="font-size:0.8125rem;">{{ market?.next_event }}</span>
+        <strong>{{ market?.next_event_time }}</strong>
+        @if (countdownStr) {
+          <span class="bp__countdown font-monospace">{{ countdownStr }}</span>
+        }
+      </div>
+    </div>
+
+    <div class="bp__grid">
+
+      <!-- ── Left: Config + Controls ── -->
+      <div class="bp__controls">
+
+        <!-- Account Verification -->
+        <section class="card bp__section">
+          <div class="bp__section-header">
+            <h2 class="bp__section-title"><i class="bi bi-person-check"></i> Account</h2>
+            <button class="btn btn-sm btn-outline-primary" (click)="loadAccount()" [disabled]="accountLoading">
+              @if (accountLoading) { <span class="spinner-border spinner-border-sm"></span> }
+              Verify
+            </button>
+          </div>
+
+          @if (!account) {
+            <p class="text-muted" style="font-size:0.8125rem;">Click Verify to check your AngelOne connection.</p>
+          }
+
+          @if (account) {
+            <div class="bp__account-status mb-2">
+              <app-state-badge [label]="account.status" [variant]="
+                account.status === 'connected' || account.status === 'paper_mode' ? 'success' :
+                account.status === 'not_configured' ? 'warning' : 'danger'" />
+              <span style="font-size:0.8125rem;">{{ account.message }}</span>
+            </div>
+
+            @if (account.name) {
+              <div class="bp__account-grid">
+                <div><span class="text-muted">Name</span><strong>{{ account.name }}</strong></div>
+                <div><span class="text-muted">Client ID</span><strong>{{ account.client_id }}</strong></div>
+                <div><span class="text-muted">Balance</span><strong class="text-success">₹{{ account.balance | number:'1.2-2' }}</strong></div>
+              </div>
+            }
+
+            @if (credentialsList.length) {
+              <div class="bp__creds">
+                @for (c of credentialsList; track c.key) {
+                  <app-state-badge [label]="(c.set ? '✔ ' : '✗ ') + c.key" [variant]="c.set ? 'success' : 'danger'" />
+                }
+              </div>
+            }
+          }
+        </section>
+
+        <!-- Bot Config -->
+        <section class="card bp__section">
+          <h2 class="bp__section-title"><i class="bi bi-gear-fill"></i> Configuration</h2>
+
+          <div class="bp__field">
+            <label class="form-label">Watchlist</label>
+            <input class="form-control form-control-sm" [(ngModel)]="watchlistStr"
+                   placeholder="RELIANCE, TCS, INFY…" />
+          </div>
+
+          <div class="bp__form-row">
+            <div class="bp__field">
+              <label class="form-label">Min Confidence</label>
+              <input type="number" class="form-control form-control-sm"
+                     [(ngModel)]="botConfig.min_confidence" min="0.1" max="1" step="0.05" />
+            </div>
+            <div class="bp__field">
+              <label class="form-label">Max Positions</label>
+              <input type="number" class="form-control form-control-sm"
+                     [(ngModel)]="botConfig.max_positions" min="1" max="20" />
+            </div>
+          </div>
+
+          <div class="bp__form-row">
+            <div class="bp__field">
+              <label class="form-label">Position Size (₹)</label>
+              <input type="number" class="form-control form-control-sm"
+                     [(ngModel)]="botConfig.position_size" min="1000" step="1000" />
+            </div>
+            <div class="bp__field">
+              <label class="form-label">Cycle (sec)</label>
+              <input type="number" class="form-control form-control-sm"
+                     [(ngModel)]="botConfig.cycle_interval" min="10" max="600" />
+            </div>
+          </div>
+
+          <div class="bp__form-row">
+            <div class="bp__field">
+              <label class="form-label">Stop Loss %</label>
+              <input type="number" class="form-control form-control-sm"
+                     [(ngModel)]="botConfig.stop_loss_pct" min="0.005" max="0.1" step="0.005" />
+            </div>
+            <div class="bp__field">
+              <label class="form-label">Take Profit %</label>
+              <input type="number" class="form-control form-control-sm"
+                     [(ngModel)]="botConfig.take_profit_pct" min="0.01" max="0.2" step="0.01" />
+            </div>
+          </div>
+        </section>
+
+        <!-- Bot Actions -->
+        <section class="card bp__section">
+          @if (!isMarketOpen && !botRunning) {
+            <div class="bp__closed-hint">
+              <i class="bi bi-lock-fill"></i> Market is closed — bot cannot be started
+            </div>
+          }
+
+          @if (botStatus?.consent_pending) {
+            <div class="bp__consent">
+              <strong><i class="bi bi-bell-fill"></i> Market has reopened!</strong>
+              <p class="mb-1">Do you want to resume trading?</p>
+              @if (botStatus?.auto_resume_in != null) {
+                <span class="font-monospace text-muted">Auto-resuming in {{ botStatus!.auto_resume_in }}s</span>
+              }
+              <div class="bp__consent-actions">
+                <button class="btn btn-sm btn-success" (click)="grantConsent()">Resume Trading</button>
+                <button class="btn btn-sm btn-danger" (click)="declineConsent()">Stop Bot</button>
+              </div>
+            </div>
+          }
+
+          @if (botStatus?.paused && !botStatus?.consent_pending && botRunning) {
+            <div class="bp__paused">
+              <i class="bi bi-pause-circle-fill"></i> Bot is paused — waiting for market to reopen
+            </div>
+          }
+
+          <div class="bp__action-btns">
+            <button class="btn btn-success flex-fill" (click)="confirmStart()"
+                    [disabled]="botRunning || starting || (!isMarketOpen && !botRunning)">
+              @if (starting) { <span class="spinner-border spinner-border-sm"></span> }
+              @else { <i class="bi bi-play-fill"></i> }
+              Start Bot
+            </button>
+            <button class="btn btn-danger flex-fill" (click)="confirmStop()"
+                    [disabled]="!botRunning || stopping">
+              @if (stopping) { <span class="spinner-border spinner-border-sm"></span> }
+              @else { <i class="bi bi-stop-fill"></i> }
+              Stop Bot
+            </button>
+          </div>
+
+          @if (botRunning) {
+            <div class="bp__running-badge">
+              <span class="bp__pulse"></span>
+              Bot running — Cycle #{{ botStatus?.cycle_count ?? 0 }}
+              @if (botStatus?.last_cycle) {
+                <span class="text-muted">({{ botStatus!.last_cycle | date:'shortTime' }})</span>
+              }
+            </div>
+          }
+        </section>
+      </div>
+
+      <!-- ── Right: Status & Trades ── -->
+      <div class="bp__status">
+
+        <!-- PnL Summary Cards -->
+        <section class="bp__pnl-grid">
+          @for (c of pnlCards; track c.label) {
+            <app-stat-card [label]="c.label" [value]="c.value"
+                           [icon]="c.icon" [trend]="c.trend ?? 'flat'" />
+          }
+        </section>
+
+        <!-- Active Positions -->
+        <section class="card bp__section">
+          <div class="bp__section-header">
+            <h2 class="bp__section-title"><i class="bi bi-stack"></i> Active Positions</h2>
+            <span class="badge bg-info text-white">{{ positionEntries.length }}</span>
+          </div>
+
+          @if (positionEntries.length === 0) {
+            <app-empty-state icon="inbox" heading="No positions" message="No active positions currently." />
+          }
+
+          @for (p of positionEntries; track p.key) {
+            <div class="bp__position">
+              <div class="bp__position-left">
+                <app-state-badge [label]="p.value.side" [variant]="p.value.side === 'buy' ? 'buy' : 'sell'" />
+                <strong>{{ p.key }}</strong>
+                <span class="text-muted">× {{ p.value.quantity }}</span>
+              </div>
+              <div class="bp__position-right">
+                <span>₹{{ p.value.entry_price | number:'1.2-2' }}</span>
+                <span [class]="p.value.pnl >= 0 ? 'text-success' : 'text-danger'" class="font-monospace">
+                  ₹{{ p.value.pnl | number:'1.2-2' }}
+                </span>
+              </div>
+            </div>
+          }
+        </section>
+
+        <!-- Trade Log -->
+        <section class="card bp__section">
+          <h2 class="bp__section-title"><i class="bi bi-journal-text"></i> Trade Log</h2>
+
+          @if (!botStatus?.trades_today?.length) {
+            <app-empty-state icon="clock-history" heading="No trades" message="No trades executed today." />
+          }
+
+          @if (botStatus?.trades_today?.length) {
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Time</th><th>Ticker</th><th>Action</th><th>Side</th>
+                    <th class="text-end">Qty</th><th class="text-end">Price</th><th class="text-end">P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (t of botStatus!.trades_today; track $index) {
+                    <tr>
+                      <td class="font-monospace">{{ t.timestamp | date:'shortTime' }}</td>
+                      <td><strong>{{ t.ticker }}</strong></td>
+                      <td>
+                        <app-state-badge [label]="t.action"
+                          [variant]="t.action === 'ENTRY' ? 'info' : t.action === 'STOP_LOSS' ? 'danger' : 'success'" />
+                      </td>
+                      <td><app-state-badge [label]="t.side" [variant]="t.side === 'buy' ? 'buy' : 'sell'" /></td>
+                      <td class="text-end">{{ t.quantity }}</td>
+                      <td class="text-end font-monospace">₹{{ t.price | number:'1.2-2' }}</td>
+                      <td class="text-end font-monospace" [class]="(t.pnl ?? 0) >= 0 ? 'text-success' : 'text-danger'">
+                        {{ t.pnl != null ? '₹' + (t.pnl | number:'1.2-2') : '—' }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+
+        <!-- Errors -->
+        @if (botStatus?.errors?.length) {
+          <section class="card bp__section bp__errors">
+            <h2 class="bp__section-title text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Bot Errors</h2>
+            @for (e of botStatus!.errors; track $index) {
+              <div class="bp__error">{{ e }}</div>
+            }
+          </section>
+        }
+      </div>
+    </div>
+
+    <!-- Confirm Dialog -->
+    @if (showConfirm) {
+      <app-confirm-dialog
+        [title]="confirmConfig.title" [message]="confirmConfig.message"
+        [severity]="confirmConfig.severity ?? 'info'" [confirmLabel]="confirmConfig.confirmLabel ?? 'Confirm'"
+        (confirm)="onConfirm()" (cancel)="onCancelConfirm()" />
+    }
+  }
+</div>

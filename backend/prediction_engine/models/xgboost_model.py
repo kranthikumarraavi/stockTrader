@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import pickle
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -76,7 +76,7 @@ class XGBoostModel(BaseModel):
         if eval_set is not None:
             fit_kwargs["eval_set"] = eval_set
         self._model.fit(X, y, **fit_kwargs)
-        self._trained_at = datetime.utcnow()
+        self._trained_at = datetime.now(timezone.utc)
         self._version = f"xgb_{self._trained_at.strftime('%Y%m%d_%H%M%S')}"
 
     def optimize_threshold(self, X_val: np.ndarray, y_val: np.ndarray) -> float:

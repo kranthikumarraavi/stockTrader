@@ -213,7 +213,7 @@ class RegimeDetector:
         if not symbols:
             symbols = [
                 "RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK",
-                "SBIN", "TATAMOTORS", "MARUTI", "ITC", "HINDUNILVR",
+                "SBIN", "MARUTI", "M_M", "ITC", "HINDUNILVR",
             ]
         result = {}
         for sym in symbols:

@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { PaperApiService, EquityPoint } from '../services/paper-api.service';
+import { NotificationService } from '../services/notification.service';
 import { EquityChartComponent } from '../components/equity-chart.component';
 import { SimulationSummaryCardComponent } from '../components/simulation-summary-card.component';
 import { OrderIntentFormComponent, OrderIntentData } from '../components/order-intent-form.component';
@@ -69,14 +70,18 @@ export class PaperAccountDetailComponent implements OnInit {
   replayResult: Record<string, unknown> | null = null;
   replaying = false;
 
-  constructor(private route: ActivatedRoute, private paperApi: PaperApiService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private paperApi: PaperApiService,
+    private notify: NotificationService,
+  ) {}
 
   ngOnInit(): void {
     this.accountId = this.route.snapshot.paramMap.get('accountId');
     if (this.accountId) {
       this.paperApi.getEquity(this.accountId).subscribe({
         next: data => this.equity = data,
-        error: () => {}
+        error: () => this.notify.error('Failed to load equity curve.')
       });
     }
   }
@@ -88,12 +93,16 @@ export class PaperAccountDetailComponent implements OnInit {
       next: result => {
         this.replayResult = result;
         this.replaying = false;
+        this.notify.success('Replay complete.');
         this.paperApi.getEquity(this.accountId!).subscribe({
           next: data => this.equity = data,
-          error: () => {}
+          error: () => this.notify.error('Failed to refresh equity curve.')
         });
       },
-      error: () => { this.replaying = false; }
+      error: () => {
+        this.replaying = false;
+        this.notify.error('Replay failed.');
+      }
     });
   }
 
@@ -101,12 +110,13 @@ export class PaperAccountDetailComponent implements OnInit {
     if (!this.accountId) return;
     this.paperApi.submitOrderIntent(this.accountId, intent as unknown as Record<string, unknown>).subscribe({
       next: () => {
+        this.notify.success('Order submitted.');
         this.paperApi.getEquity(this.accountId!).subscribe({
           next: data => this.equity = data,
-          error: () => {}
+          error: () => this.notify.error('Failed to refresh equity curve.')
         });
       },
-      error: () => {}
+      error: () => this.notify.error('Order submission failed.')
     });
   }
 }

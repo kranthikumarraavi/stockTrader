@@ -1,0 +1,210 @@
+<!-- Trading Terminal — Phase 3.4 -->
+<div class="td">
+
+  <!-- ── Error Banner ── -->
+  @if (loadError && !loading) {
+    <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>Failed to connect to market service.</span>
+      <button class="btn btn-sm btn-outline-danger ms-auto" (click)="loadMarket()">Retry</button>
+    </div>
+  }
+
+  <!-- ── Header Bar ── -->
+  <header class="td__header">
+    <div class="td__header-left">
+      <app-symbol-search (symbolSelect)="onSymbolSelect($event)" />
+      <h1 class="td__title">{{ symbol }}</h1>
+      @if (lastPrice) {
+        <app-price-display [price]="lastPrice" [change]="priceChange" [changePct]="priceChangePct" />
+      }
+    </div>
+    <div class="td__header-right">
+      <app-state-badge [label]="sessionLabel" [variant]="sessionBadge" />
+      @if (market) {
+        <span class="td__next-event">{{ market.next_event }} · {{ market.next_event_time }}</span>
+      }
+      @if (streaming) {
+        <span class="td__live-dot" title="Streaming"></span>
+      }
+    </div>
+  </header>
+
+  @if (loading) {
+    <div class="td__skeleton-grid">
+      <app-loading-skeleton shape="chart" />
+      <app-loading-skeleton shape="card" />
+    </div>
+  } @else {
+
+    <!-- ── Main Grid: Chart + Order Panel ── -->
+    <div class="td__grid">
+
+      <!-- Left: Chart + Tabs -->
+      <section class="td__chart-section">
+        <div class="td__chart-toolbar">
+          <div class="btn-group btn-group-sm" role="group">
+            <button class="btn" [class.btn-primary]="chartMode === 'line'"
+                    [class.btn-outline-secondary]="chartMode !== 'line'" (click)="setChartMode('line')">Line</button>
+            <button class="btn" [class.btn-primary]="chartMode === 'area'"
+                    [class.btn-outline-secondary]="chartMode !== 'area'" (click)="setChartMode('area')">Area</button>
+            <button class="btn" [class.btn-primary]="chartMode === 'candlestick'"
+                    [class.btn-outline-secondary]="chartMode !== 'candlestick'" (click)="setChartMode('candlestick')">Candle</button>
+          </div>
+          <span class="td__tick-count">{{ tickCount }} ticks</span>
+        </div>
+
+        <div class="td__chart-wrap">
+          <app-trading-chart
+            #tradingChart
+            [lineData]="lineData"
+            [volumeData]="volumeData"
+            [mode]="chartMode"
+            [height]="480" />
+        </div>
+      </section>
+
+      <!-- Right: Order Panel -->
+      <aside class="td__order-panel">
+        @if (!isMarketOpen) {
+          <div class="td__market-closed">
+            <i class="bi bi-lock-fill"></i>
+            <span>Market closed — trading disabled</span>
+          </div>
+        }
+
+        <app-order-form
+          [config]="orderConfig"
+          [disabled]="!isMarketOpen || orderSubmitting"
+          (submitOrder)="onOrderSubmit($event)" />
+
+        <!-- Quick Account Info -->
+        @if (market) {
+          <div class="td__session-info">
+            <div class="td__session-row">
+              <span class="text-muted">Session</span>
+              <strong>{{ market.message }}</strong>
+            </div>
+            <div class="td__session-row">
+              <span class="text-muted">IST</span>
+              <span class="font-monospace">{{ market.ist_now }}</span>
+            </div>
+          </div>
+        }
+      </aside>
+    </div>
+
+    <!-- ── Bottom Row: Intents + Executions ── -->
+    <div class="td__bottom-grid">
+
+      <!-- Pending Intents -->
+      <section class="td__intents card">
+        <div class="td__section-header">
+          <h2 class="td__section-title">
+            <i class="bi bi-clock-history"></i> Pending Intents
+          </h2>
+          @if (intents.length) {
+            <span class="badge bg-warning text-dark">{{ intents.length }}</span>
+          }
+        </div>
+
+        @if (intents.length === 0) {
+          <app-empty-state
+            icon="clock-history"
+            heading="No pending intents"
+            message="Create a trade intent using the order form above." />
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Side</th>
+                  <th>Qty</th>
+                  <th>Type</th>
+                  <th class="text-end">Est. Cost</th>
+                  <th class="text-end">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (intent of intents; track trackByIntentId($index, intent)) {
+                  <tr>
+                    <td><strong>{{ intent.ticker }}</strong></td>
+                    <td><app-state-badge [label]="intent.side" [variant]="intent.side === 'buy' ? 'buy' : 'sell'" /></td>
+                    <td>{{ intent.quantity }}</td>
+                    <td>{{ intent.order_type }}</td>
+                    <td class="text-end font-monospace">{{ intent.estimated_cost | number:'1.2-2' }}</td>
+                    <td class="text-end">
+                      <button class="btn btn-sm btn-success" (click)="executeIntent(intent)" [disabled]="!isMarketOpen">
+                        Execute
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+
+      <!-- Executions -->
+      <section class="td__executions card">
+        <div class="td__section-header">
+          <h2 class="td__section-title">
+            <i class="bi bi-check2-circle"></i> Executions
+          </h2>
+          @if (executions.length) {
+            <span class="badge bg-success">{{ executions.length }}</span>
+          }
+        </div>
+
+        @if (executions.length === 0) {
+          <app-empty-state
+            icon="check2-circle"
+            heading="No executions yet"
+            message="Execute a pending intent to see trades here." />
+        } @else {
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Side</th>
+                  <th>Qty</th>
+                  <th class="text-end">Filled</th>
+                  <th class="text-end">Total</th>
+                  <th class="text-end">Slippage</th>
+                  <th class="text-end">Latency</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (exec of executions; track trackByExecId($index, exec)) {
+                  <tr>
+                    <td><strong>{{ exec.ticker }}</strong></td>
+                    <td><app-state-badge [label]="exec.side" [variant]="exec.side === 'buy' ? 'buy' : 'sell'" /></td>
+                    <td>{{ exec.quantity }}</td>
+                    <td class="text-end font-monospace">{{ exec.filled_price | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace">{{ exec.total_value | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace">{{ exec.slippage | number:'1.4-4' }}</td>
+                    <td class="text-end font-monospace">{{ exec.latency_ms | number:'1.0-0' }}ms</td>
+                    <td><app-state-badge [label]="exec.status" variant="filled" /></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+    </div>
+
+  }
+
+  <!-- Confirm Dialog -->
+  @if (showConfirm) {
+    <app-confirm-dialog
+      [title]="confirmConfig.title" [message]="confirmConfig.message"
+      [severity]="confirmConfig.severity ?? 'info'" [confirmLabel]="confirmConfig.confirmLabel ?? 'Confirm'"
+      (confirm)="onConfirmOrder()" (cancel)="onCancelConfirm()" />
+  }
+</div>

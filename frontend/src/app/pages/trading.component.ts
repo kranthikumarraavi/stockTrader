@@ -1,325 +1,263 @@
-// Trading page component
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import {
+  Component, ChangeDetectionStrategy, ChangeDetectorRef,
+  OnInit, OnDestroy, ViewChild,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { TradeApiService, TradeIntentRequest, TradeIntent, Execution } from '../services/trade-api.service';
-import { AuthService } from '../services/auth.service';
+import { RouterModule } from '@angular/router';
+import { Subject, Subscription, takeUntil, timer, catchError, of } from 'rxjs';
+
+import { TradeApiService } from '../services/trade-api.service';
+import { MarketApiService } from '../services/market-api.service';
+import { PriceStreamService } from '../services/price-stream.service';
 import { NotificationService } from '../services/notification.service';
-import { MarketApiService, MarketStatus } from '../services/market-api.service';
+import { MarketStatus, PriceTick } from '../core/models/market.model';
+import { TradeIntent, Execution } from '../core/models/order.model';
+import { Position } from '../core/models/position.model';
+
+import {
+  TradingChartComponent, PriceDisplayComponent, StateBadgeComponent,
+  LoadingSkeletonComponent, EmptyStateComponent, OrderFormComponent,
+  SymbolSearchComponent, ConfirmDialogComponent,
+  ChartMode, PricePoint, VolumeBar, BadgeVariant,
+  OrderFormPayload, OrderFormConfig, SymbolResult, ConfirmDialogConfig,
+} from '../shared';
 
 @Component({
   selector: 'app-trading',
   standalone: true,
-  imports: [CommonModule, FormsModule],
-  template: `
-    <div class="page">
-      <h1>Trading</h1>
-
-      <!-- Market Status Banner -->
-      <div class="card mb-2 market-banner" [ngClass]="'market-' + (market?.phase || 'closed')">
-        <div class="flex justify-between items-center">
-          <div class="flex items-center gap-1">
-            <span class="market-dot" [ngClass]="{'dot-open': market?.phase === 'open', 'dot-pre': market?.phase === 'pre_open', 'dot-closed': market?.phase !== 'open' && market?.phase !== 'pre_open'}"></span>
-            <div>
-              <strong>{{ market?.message || 'Loading market status...' }}</strong>
-              <div class="text-sm text-muted">{{ market?.ist_now }}</div>
-            </div>
-          </div>
-          <div class="text-right">
-            <div class="text-sm">{{ market?.next_event }}</div>
-            <strong>{{ market?.next_event_time }}</strong>
-          </div>
-        </div>
-      </div>
-
-      <!-- Auth Token -->
-      <div class="card mb-2" *ngIf="!auth.isAuthenticated">
-        <h3>Authentication Required</h3>
-        <p class="text-muted text-sm">Set your API token to execute trades.</p>
-        <div class="flex gap-1">
-          <input type="password" [(ngModel)]="tokenInput" placeholder="Bearer token" style="flex:1" />
-          <button class="btn-primary" (click)="setToken()">Set Token</button>
-        </div>
-      </div>
-      <div class="card mb-2" *ngIf="auth.isAuthenticated">
-        <div class="flex justify-between items-center">
-          <span class="badge badge-success">Authenticated</span>
-          <button class="btn-sm btn-danger" (click)="auth.clearToken()">Logout</button>
-        </div>
-      </div>
-
-      <div class="flex gap-3" style="align-items: flex-start;">
-        <!-- Order Form -->
-        <div class="card" style="flex: 1; min-width: 320px;">
-          <h2>Create Trade Intent</h2>
-
-          <div *ngIf="!isMarketOpen" class="market-closed-overlay">
-            <span>🔒 Market is closed — trading is disabled</span>
-          </div>
-
-          <fieldset [disabled]="!isMarketOpen">
-            <div class="tab-bar">
-              <button class="tab" [class.active]="orderTab === 'equity'" (click)="orderTab = 'equity'">Equity</button>
-              <button class="tab" [class.active]="orderTab === 'options'" (click)="orderTab = 'options'">Options</button>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Ticker</label>
-                <input [(ngModel)]="form.ticker" placeholder="RELIANCE" required />
-              </div>
-              <div class="form-group">
-                <label>Side</label>
-                <select [(ngModel)]="form.side">
-                  <option value="buy">Buy</option>
-                  <option value="sell">Sell</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>Quantity</label>
-                <input type="number" [(ngModel)]="form.quantity" min="1" required />
-              </div>
-              <div class="form-group">
-                <label>Order Type</label>
-                <select [(ngModel)]="form.order_type">
-                  <option value="market">Market</option>
-                  <option value="limit">Limit</option>
-                </select>
-              </div>
-            </div>
-
-            <div *ngIf="form.order_type === 'limit'" class="form-group">
-              <label>Limit Price (?)</label>
-              <input type="number" [(ngModel)]="form.limit_price" min="0.01" step="0.01" />
-            </div>
-
-            <!-- Options fields -->
-            <div *ngIf="orderTab === 'options'">
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Option Type</label>
-                  <select [(ngModel)]="form.option_type">
-                    <option value="CE">Call (CE)</option>
-                    <option value="PE">Put (PE)</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label>Strike Price</label>
-                  <input type="number" [(ngModel)]="form.strike" min="0" step="0.5" />
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Expiry</label>
-                  <input type="date" [(ngModel)]="form.expiry" />
-                </div>
-                <div class="form-group">
-                  <label>Strategy</label>
-                  <select [(ngModel)]="form.strategy">
-                    <option value="single">Single</option>
-                    <option value="vertical_spread">Vertical Spread</option>
-                    <option value="iron_condor">Iron Condor</option>
-                    <option value="covered_call">Covered Call</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <button class="btn-primary btn-lg" style="width: 100%; margin-top: 0.5rem;" (click)="createIntent()" [disabled]="submitting || !isMarketOpen">
-              {{ !isMarketOpen ? '🔒 Market Closed' : submitting ? 'Submitting...' : 'Create Intent' }}
-            </button>
-          </fieldset>
-        </div>
-
-        <!-- Intents & Executions -->
-        <div style="flex: 1.5; min-width: 400px;">
-          <!-- Pending Intents -->
-          <div class="card mb-2">
-            <h2>Pending Intents</h2>
-            <div *ngIf="intents.length === 0" class="text-muted text-sm">No pending intents.</div>
-            <div *ngFor="let intent of intents" class="intent-row">
-              <div class="flex justify-between items-center">
-                <div>
-                  <span class="badge" [ngClass]="intent.side === 'buy' ? 'badge-buy' : 'badge-sell'">{{ intent.side }}</span>
-                  <strong style="margin-left: 8px;">{{ intent.ticker }}</strong>
-                  <span class="text-muted" style="margin-left: 8px;">× {{ intent.quantity }}</span>
-                  <span *ngIf="intent.option_type" class="badge badge-info" style="margin-left: 8px;">{{ intent.option_type }} {{ intent.strike }}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                  <span class="text-sm text-muted">Est: ₹{{ intent.estimated_cost | number:'1.2-2' }}</span>
-                  <button class="btn-sm btn-success" (click)="executeIntent(intent)" [disabled]="!auth.isAuthenticated || executingId === intent.intent_id || !isMarketOpen">
-                    {{ !isMarketOpen ? '🔒' : executingId === intent.intent_id ? 'Executing...' : 'Execute' }}
-                  </button>
-                </div>
-              </div>
-              <div class="text-sm text-muted mt-1">
-                {{ intent.order_type | uppercase }} · ID: <span class="text-mono">{{ intent.intent_id | slice:0:8 }}...</span>
-                · {{ intent.created_at | date:'short' }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Executions -->
-          <div class="card">
-            <h2>Executions</h2>
-            <div *ngIf="executions.length === 0" class="text-muted text-sm">No executions yet.</div>
-            <table *ngIf="executions.length > 0">
-              <thead>
-                <tr>
-                  <th>Ticker</th><th>Side</th><th>Qty</th><th>Filled</th><th>Total</th><th>Slippage</th><th>Latency</th><th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let e of executions">
-                  <td><strong>{{ e.ticker }}</strong></td>
-                  <td><span class="badge" [ngClass]="e.side === 'buy' ? 'badge-buy' : 'badge-sell'">{{ e.side }}</span></td>
-                  <td>{{ e.quantity }}</td>
-                  <td>₹{{ e.filled_price | number:'1.2-2' }}</td>
-                  <td>₹{{ e.total_value | number:'1.2-2' }}</td>
-                  <td class="text-mono text-sm">{{ e.slippage | number:'1.4-4' }}</td>
-                  <td class="text-mono text-sm">{{ e.latency_ms | number:'1.1-1' }}ms</td>
-                  <td><span class="badge badge-success">{{ e.status }}</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  `,
-  styles: [`
-    .intent-row {
-      padding: 12px;
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      margin-bottom: 8px;
-      transition: background var(--transition);
-    }
-    .intent-row:hover { background: var(--color-surface-hover); }
-    .market-banner { border-left: 4px solid var(--color-border); }
-    .market-open { border-left-color: #16a34a; background: rgba(22, 163, 74, 0.04); }
-    .market-pre_open { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.04); }
-    .market-closed, .market-holiday, .market-weekend, .market-post_close {
-      border-left-color: #dc2626; background: rgba(220, 38, 38, 0.04);
-    }
-    .market-dot {
-      width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex-shrink: 0;
-    }
-    .dot-open { background: #16a34a; box-shadow: 0 0 8px rgba(22, 163, 74, 0.5); }
-    .dot-pre { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.5); }
-    .dot-closed { background: #dc2626; }
-    .market-closed-overlay {
-      padding: 10px 14px; border-radius: var(--radius-md); margin-bottom: 0.75rem;
-      background: rgba(220, 38, 38, 0.06); color: #dc2626; font-weight: 600;
-      text-align: center; font-size: 0.9rem;
-    }
-    fieldset { border: none; padding: 0; margin: 0; }
-    fieldset:disabled { opacity: 0.5; pointer-events: none; }
-    .btn-success {
-      background: #16a34a; color: white; border: none; padding: 6px 14px;
-      border-radius: var(--radius-md); cursor: pointer; font-weight: 600;
-    }
-    .btn-success:disabled { opacity: 0.5; cursor: not-allowed; }
-    @media (max-width: 900px) {
-      :host .flex.gap-3 { flex-direction: column; }
-    }
-  `]
+  imports: [
+    CommonModule, RouterModule,
+    TradingChartComponent, PriceDisplayComponent, StateBadgeComponent,
+    LoadingSkeletonComponent, EmptyStateComponent, OrderFormComponent,
+    SymbolSearchComponent, ConfirmDialogComponent,
+  ],
+  templateUrl: './trading.component.html',
+  styleUrl: './trading.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TradingComponent implements OnInit, OnDestroy {
-  tokenInput = '';
-  orderTab: 'equity' | 'options' = 'equity';
-  submitting = false;
-  executingId: string | null = null;
+  @ViewChild('tradingChart') tradingChartRef!: TradingChartComponent;
+
+  // Instrument
+  symbol = 'RELIANCE';
+  lastPrice = 0;
+  priceChange = 0;
+  priceChangePct = 0;
+  prevClose = 0;
+
+  // Chart
+  chartMode: ChartMode = 'line';
+  lineData: PricePoint[] = [];
+  volumeData: VolumeBar[] = [];
+  streaming = false;
+  tickCount = 0;
+
+  // Market
   market: MarketStatus | null = null;
-  private marketTimer: any;
+  loading = true;
+  loadError = false;
 
-  form: TradeIntentRequest = {
-    ticker: 'RELIANCE',
-    side: 'buy',
-    quantity: 10,
-    order_type: 'market'
-  };
+  // Order
+  orderConfig: OrderFormConfig = {};
+  orderSubmitting = false;
 
+  // Confirm dialog
+  showConfirm = false;
+  confirmConfig: ConfirmDialogConfig = { title: '', message: '' };
+  pendingPayload: OrderFormPayload | null = null;
+
+  // Positions & Trades
+  positions: Position[] = [];
   intents: TradeIntent[] = [];
   executions: Execution[] = [];
 
-  get isMarketOpen(): boolean {
-    if (!this.market) return false;
-    return this.market.phase === 'open' || this.market.phase === 'pre_open';
-  }
+  private destroy$ = new Subject<void>();
+  private streamSub: Subscription | null = null;
 
   constructor(
-    public auth: AuthService,
+    private cdr: ChangeDetectorRef,
     private tradeApi: TradeApiService,
+    private marketApi: MarketApiService,
+    private priceStream: PriceStreamService,
     private notify: NotificationService,
-    private marketApi: MarketApiService
   ) {}
 
   ngOnInit(): void {
     this.loadMarket();
-    this.marketTimer = setInterval(() => this.loadMarket(), 30_000);
+    timer(30_000, 30_000).pipe(takeUntil(this.destroy$)).subscribe(() => this.loadMarket());
+    this.loadSymbol(this.symbol);
   }
 
   ngOnDestroy(): void {
-    clearInterval(this.marketTimer);
+    this.stopStream();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
-  loadMarket(): void {
-    this.marketApi.getMarketStatus().subscribe({
-      next: m => { this.market = m; },
-      error: () => {}
-    });
+  // ── Computed ──
+  get isMarketOpen(): boolean {
+    return this.market?.phase === 'open' || this.market?.phase === 'pre_open';
   }
 
-  setToken(): void {
-    if (this.tokenInput.trim()) {
-      this.auth.setToken(this.tokenInput.trim());
-      this.tokenInput = '';
-      this.notify.success('Token saved.');
+  get sessionBadge(): BadgeVariant {
+    if (!this.market) return 'neutral';
+    switch (this.market.phase) {
+      case 'open': return 'success';
+      case 'pre_open': return 'warning';
+      default: return 'danger';
     }
   }
 
-  createIntent(): void {
-    if (!this.form.ticker || this.form.quantity < 1) {
-      this.notify.warning('Please fill ticker and quantity.');
-      return;
+  get sessionLabel(): string {
+    if (!this.market) return 'Loading…';
+    switch (this.market.phase) {
+      case 'open': return 'OPEN';
+      case 'pre_open': return 'PRE-OPEN';
+      default: return 'CLOSED';
     }
+  }
 
-    this.submitting = true;
-    const request: TradeIntentRequest = { ...this.form };
-    if (this.orderTab === 'equity') {
-      delete request.option_type;
-      delete request.strike;
-      delete request.expiry;
-      delete request.strategy;
-    }
-    if (request.order_type !== 'limit') {
-      delete request.limit_price;
-    }
+  // ── Actions ──
+  onSymbolSelect(result: SymbolResult): void {
+    this.loadSymbol(result.symbol);
+  }
 
-    this.tradeApi.createIntent(request).subscribe({
-      next: intent => {
-        this.intents = [intent, ...this.intents];
-        this.submitting = false;
-        this.notify.success(`Intent created for ${intent.ticker} — Est: ₹${intent.estimated_cost.toFixed(2)}`);
+  loadSymbol(sym: string): void {
+    this.symbol = sym.toUpperCase().trim();
+    if (!this.symbol) return;
+    this.stopStream();
+    this.lineData = [];
+    this.volumeData = [];
+    this.tickCount = 0;
+    this.loading = true;
+    this.orderConfig = { symbol: this.symbol };
+    this.cdr.markForCheck();
+    this.startStream();
+  }
+
+  startStream(): void {
+    this.stopStream();
+    this.streaming = true;
+    this.loading = false;
+    this.cdr.markForCheck();
+
+    this.streamSub = this.priceStream.connect(this.symbol).subscribe({
+      next: tick => {
+        this.tickCount++;
+        this.processTick(tick);
+        this.cdr.markForCheck();
       },
-      error: () => { this.submitting = false; }
+      error: () => {
+        this.streaming = false;
+        this.cdr.markForCheck();
+      },
     });
+  }
+
+  stopStream(): void {
+    this.streamSub?.unsubscribe();
+    this.streamSub = null;
+    this.streaming = false;
+  }
+
+  onOrderSubmit(payload: OrderFormPayload): void {
+    this.pendingPayload = payload;
+    this.confirmConfig = {
+      title: 'Confirm Order',
+      message: `${payload.side.toUpperCase()} ${payload.quantity} × ${payload.symbol} (${payload.orderType})`,
+      severity: payload.side === 'sell' ? 'danger' : 'info',
+      confirmLabel: payload.side === 'buy' ? 'Place Buy' : 'Place Sell',
+    };
+    this.showConfirm = true;
+    this.cdr.markForCheck();
+  }
+
+  onConfirmOrder(): void {
+    this.showConfirm = false;
+    if (!this.pendingPayload) return;
+    const p = this.pendingPayload;
+    this.orderSubmitting = true;
+    this.cdr.markForCheck();
+
+    this.tradeApi.createIntent({
+      ticker: p.symbol,
+      side: p.side,
+      quantity: p.quantity,
+      order_type: p.orderType === 'market' ? 'market' : 'limit',
+      limit_price: p.price ?? undefined,
+    }).pipe(
+      catchError(() => { this.notify.error('Order failed'); return of(null); }),
+      takeUntil(this.destroy$),
+    ).subscribe(intent => {
+      this.orderSubmitting = false;
+      if (intent) {
+        this.intents = [intent, ...this.intents];
+        this.notify.success(`Intent created: ${intent.ticker}`);
+      }
+      this.pendingPayload = null;
+      this.cdr.markForCheck();
+    });
+  }
+
+  onCancelConfirm(): void {
+    this.showConfirm = false;
+    this.pendingPayload = null;
+    this.cdr.markForCheck();
   }
 
   executeIntent(intent: TradeIntent): void {
-    this.executingId = intent.intent_id;
-    this.tradeApi.execute(intent.intent_id).subscribe({
-      next: exec => {
+    this.tradeApi.execute(intent.intent_id).pipe(
+      catchError(() => { this.notify.error('Execution failed'); return of(null); }),
+      takeUntil(this.destroy$),
+    ).subscribe(exec => {
+      if (exec) {
         this.executions = [exec, ...this.executions];
         this.intents = this.intents.filter(i => i.intent_id !== intent.intent_id);
-        this.executingId = null;
-        this.notify.success(`Trade executed: ${exec.ticker} ${exec.side} × ${exec.quantity} @ ₹${exec.filled_price.toFixed(2)}`);
-      },
-      error: () => { this.executingId = null; }
+        this.notify.success(`Executed: ${exec.ticker} @ ₹${exec.filled_price.toFixed(2)}`);
+      }
+      this.cdr.markForCheck();
+    });
+  }
+
+  setChartMode(mode: ChartMode): void {
+    this.chartMode = mode;
+    this.cdr.markForCheck();
+  }
+
+  trackByIntentId(_: number, item: TradeIntent): string { return item.intent_id; }
+  trackByExecId(_: number, item: Execution): string { return item.execution_id; }
+
+  // ── Private ──
+  private processTick(tick: PriceTick): void {
+    this.lastPrice = tick.price;
+    this.priceChange = this.prevClose ? tick.price - this.prevClose : 0;
+    this.priceChangePct = this.prevClose ? (this.priceChange / this.prevClose) * 100 : 0;
+
+    this.lineData = [...this.lineData, { time: tick.timestamp, value: tick.price }];
+    this.volumeData = [...this.volumeData, {
+      time: tick.timestamp, value: tick.volume,
+      color: tick.price >= (this.lineData.length > 1 ? this.lineData[this.lineData.length - 2].value : tick.price)
+        ? '#2e7d3233' : '#d32f2f33',
+    }];
+    if (this.lineData.length > 500) {
+      this.lineData = this.lineData.slice(-500);
+      this.volumeData = this.volumeData.slice(-500);
+    }
+    this.orderConfig = { ...this.orderConfig, lastPrice: tick.price };
+  }
+
+  loadMarket(): void {
+    this.loadError = false;
+    this.marketApi.getMarketStatus().pipe(
+      catchError(() => of(null)), takeUntil(this.destroy$),
+    ).subscribe(m => {
+      if (m) {
+        this.market = m;
+      } else {
+        this.loadError = true;
+      }
+      this.loading = false;
+      this.cdr.markForCheck();
     });
   }
 }

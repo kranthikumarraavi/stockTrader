@@ -17,13 +17,23 @@ def create_service_app(title: str, version: str = "0.1.0") -> FastAPI:
         redoc_url="/redoc",
     )
 
-    _origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:4200")
+    _origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    if "*" in _origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Authorization"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Authorization"],
+        )
 
     return app

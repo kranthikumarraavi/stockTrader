@@ -51,7 +51,7 @@ import { LivePriceChartComponent, PriceTick } from '../components/live-price-cha
 
       <!-- ── Indices Cards ──────────────────────────── -->
       <div class="indices-row mb-2">
-        <div *ngFor="let idx of indicesData" class="index-card card"
+        <div *ngFor="let idx of indicesData; trackBy: trackBySymbol" class="index-card card"
              (click)="selectSymbol(idx.symbol)"
              [ngClass]="{'idx-selected': selectedSymbol === idx.symbol}">
           <div class="idx-name">{{ indexDisplayName(idx.symbol) }}</div>
@@ -74,11 +74,23 @@ import { LivePriceChartComponent, PriceTick } from '../components/live-price-cha
         <div class="cat-chips">
           <button class="cat-chip" [ngClass]="{'cat-active': activeCategory === 'All'}"
                   (click)="filterCategory('All')">All ({{ totalSymbols }})</button>
-          <button *ngFor="let cat of categoryNames" class="cat-chip"
+          <button *ngFor="let cat of categoryNames; trackBy: trackByIdentity" class="cat-chip"
                   [ngClass]="{'cat-active': activeCategory === cat}"
                   (click)="filterCategory(cat)">
             {{ cat }} ({{ categorySymbolCounts[cat] || 0 }})
           </button>
+        </div>
+      </div>
+
+      <!-- Add Symbol -->
+      <div class="card mb-2">
+        <div class="flex items-center gap-1">
+          <input [(ngModel)]="newSymbolInput" placeholder="Add new symbol (e.g. ADANIGREEN)"
+                 style="flex:1" (keydown.enter)="addNewSymbol()" />
+          <button class="btn-primary btn-sm" (click)="addNewSymbol()" [disabled]="addingSymbol || !newSymbolInput.trim()">
+            {{ addingSymbol ? 'Adding...' : '+ Add Symbol' }}
+          </button>
+          <span *ngIf="addSymbolMsg" class="text-sm" [ngClass]="addSymbolError ? 'text-sell' : 'up'">{{ addSymbolMsg }}</span>
         </div>
       </div>
 
@@ -135,7 +147,7 @@ import { LivePriceChartComponent, PriceTick } from '../components/live-price-cha
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let item of watchlistArray" [ngClass]="{'row-selected': selectedSymbol === item.symbol}"
+                <tr *ngFor="let item of watchlistArray; trackBy: trackBySymbol" [ngClass]="{'row-selected': selectedSymbol === item.symbol}"
                     (click)="selectSymbol(item.symbol)">
                   <td><strong>{{ item.symbol }}</strong></td>
                   <td class="price-cell" [ngClass]="(item.change ?? 0) >= 0 ? 'up' : 'down'">
@@ -190,7 +202,7 @@ import { LivePriceChartComponent, PriceTick } from '../components/live-price-cha
         <!-- Market Overview: Gainers -->
         <div class="card grid-gainers">
           <h3 class="panel-title gainer-title">📈 Top Gainers</h3>
-          <div *ngFor="let g of overview?.gainers || []" class="overview-row">
+          <div *ngFor="let g of overview?.gainers || []; trackBy: trackBySymbol" class="overview-row">
             <span class="ov-sym" (click)="selectSymbol(g.symbol)">{{ g.symbol }}</span>
             <span class="up">₹{{ g.price | number:'1.2-2' }}</span>
             <span class="up badge-up">+{{ g.change_pct | number:'1.2-2' }}%</span>
@@ -203,7 +215,7 @@ import { LivePriceChartComponent, PriceTick } from '../components/live-price-cha
         <!-- Market Overview: Losers -->
         <div class="card grid-losers">
           <h3 class="panel-title loser-title">📉 Top Losers</h3>
-          <div *ngFor="let l of overview?.losers || []" class="overview-row">
+          <div *ngFor="let l of overview?.losers || []; trackBy: trackBySymbol" class="overview-row">
             <span class="ov-sym" (click)="selectSymbol(l.symbol)">{{ l.symbol }}</span>
             <span class="down">₹{{ l.price | number:'1.2-2' }}</span>
             <span class="down badge-down">{{ l.change_pct | number:'1.2-2' }}%</span>
@@ -216,7 +228,7 @@ import { LivePriceChartComponent, PriceTick } from '../components/live-price-cha
         <!-- Volume Leaders -->
         <div class="card grid-volume">
           <h3 class="panel-title">📊 Volume Leaders</h3>
-          <div *ngFor="let v of overview?.volume_leaders || []" class="overview-row">
+          <div *ngFor="let v of overview?.volume_leaders || []; trackBy: trackBySymbol" class="overview-row">
             <span class="ov-sym" (click)="selectSymbol(v.symbol)">{{ v.symbol }}</span>
             <span>{{ v.volume | number }}</span>
             <span [ngClass]="(v.change_pct ?? 0) >= 0 ? 'up' : 'down'">
@@ -229,7 +241,7 @@ import { LivePriceChartComponent, PriceTick } from '../components/live-price-cha
         <div class="card grid-feed">
           <h3 class="panel-title">📡 Live Trade Feed</h3>
           <div class="feed-scroll">
-            <div *ngFor="let f of tradeFeed" class="feed-item" [ngClass]="(f.change_pct ?? 0) >= 0 ? 'feed-up' : 'feed-down'">
+            <div *ngFor="let f of tradeFeed; trackBy: trackBySymbol" class="feed-item" [ngClass]="(f.change_pct ?? 0) >= 0 ? 'feed-up' : 'feed-down'">
               <span class="feed-time">{{ f.timestamp | date:'HH:mm:ss' }}</span>
               <strong>{{ f.symbol }}</strong>
               <span>₹{{ f.price | number:'1.2-2' }}</span>
@@ -497,6 +509,12 @@ export class LiveMarketComponent implements OnInit, OnDestroy {
   private allCategorySymbols: { [key: string]: string[] } = {};
   private allSymbolsList: string[] = [];
 
+  // Add symbol
+  newSymbolInput = '';
+  addingSymbol = false;
+  addSymbolMsg = '';
+  addSymbolError = false;
+
   private subs: Subscription[] = [];
   private marketTimer: any;
   private overviewTimer: any;
@@ -711,6 +729,49 @@ export class LiveMarketComponent implements OnInit, OnDestroy {
     this.startStream();
   }
 
+  addNewSymbol(): void {
+    const sym = this.newSymbolInput.trim().toUpperCase();
+    if (!sym) return;
+
+    // If already in the symbol list, just add to input
+    if (this.allSymbolsList.includes(sym)) {
+      this.addSymbolMsg = `${sym} is already available.`;
+      this.addSymbolError = false;
+      this.appendToSymbolInput(sym);
+      this.newSymbolInput = '';
+      return;
+    }
+
+    this.addingSymbol = true;
+    this.addSymbolMsg = '';
+    this.addSymbolError = false;
+
+    this.liveStream.addSymbol(sym).subscribe({
+      next: res => {
+        this.addingSymbol = false;
+        this.addSymbolMsg = res.message;
+        this.addSymbolError = false;
+        this.newSymbolInput = '';
+        // Append to current symbol input and refresh categories
+        this.appendToSymbolInput(sym);
+        this.loadCategories();
+      },
+      error: (err) => {
+        this.addingSymbol = false;
+        this.addSymbolMsg = err.error?.detail || `Could not add ${sym}. Check the symbol name.`;
+        this.addSymbolError = true;
+      }
+    });
+  }
+
+  private appendToSymbolInput(sym: string): void {
+    const current = this.symbolInput.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (!current.includes(sym)) {
+      current.push(sym);
+      this.symbolInput = current.join(',');
+    }
+  }
+
   indexDisplayName(symbol: string): string {
     const map: { [k: string]: string } = {
       'NIFTY50': 'NIFTY 50',
@@ -743,7 +804,7 @@ export class LiveMarketComponent implements OnInit, OnDestroy {
 
   disconnectLiveFeed(): void {
     this.liveStream.disconnectLive().subscribe({
-      next: res => { this.feedMode = res.feed_mode || 'replay'; },
+      next: res => { this.feedMode = res['feed_mode'] || 'replay'; },
       error: () => {}
     });
   }
@@ -754,5 +815,8 @@ export class LiveMarketComponent implements OnInit, OnDestroy {
     clearInterval(this.marketTimer);
     clearInterval(this.overviewTimer);
   }
+
+  trackBySymbol(_: number, item: { symbol: string }): string { return item.symbol; }
+  trackByIdentity(_: number, item: string): string { return item; }
 }
 

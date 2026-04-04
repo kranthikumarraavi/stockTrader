@@ -1,57 +1,40 @@
-// Price stream service
-import { Injectable, NgZone } from '@angular/core';
+// Price stream service — uses managed WebSocket via core/services/websocket.service
+import { Injectable, OnDestroy } from '@angular/core';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 import { PriceTick } from '../core/models';
+import { WebsocketService, ManagedConnection } from '../core/services/websocket.service';
 
 export { PriceTick };
 
 @Injectable({ providedIn: 'root' })
-export class PriceStreamService {
-  constructor(private ngZone: NgZone) {}
+export class PriceStreamService implements OnDestroy {
+  private connections = new Map<string, ManagedConnection>();
 
-  connect(symbol: string): Observable<PriceTick> {
-    return new Observable<PriceTick>(subscriber => {
-      const wsUrl = `ws://${window.location.host}/api/v1/stream/price/${encodeURIComponent(symbol)}`;
-      const sseUrl = `/api/v1/stream/price/${encodeURIComponent(symbol)}`;
+  constructor(private wsService: WebsocketService) {}
 
-      try {
-        const ws = new WebSocket(wsUrl);
-
-        ws.onmessage = (event) => {
-          this.ngZone.run(() => {
-            subscriber.next(JSON.parse(event.data));
-          });
-        };
-
-        ws.onerror = () => {
-          ws.close();
-          this.connectSSE(sseUrl, subscriber);
-        };
-
-        ws.onclose = () => {
-          if (!subscriber.closed) {
-            this.connectSSE(sseUrl, subscriber);
-          }
-        };
-
-        return () => ws.close();
-      } catch {
-        return this.connectSSE(sseUrl, subscriber);
-      }
-    });
+  ngOnDestroy(): void {
+    this.connections.forEach(c => c.disconnect());
+    this.connections.clear();
   }
 
-  private connectSSE(url: string, subscriber: any): () => void {
-    const source = new EventSource(url);
-    source.onmessage = (event) => {
-      this.ngZone.run(() => {
-        subscriber.next(JSON.parse(event.data));
+  connect(symbol: string): Observable<PriceTick> {
+    const path = `/stream/price/${encodeURIComponent(symbol)}`;
+    const sseUrl = `${environment.apiBaseUrl}/stream/price/${encodeURIComponent(symbol)}`;
+
+    return new Observable<PriceTick>(subscriber => {
+      const conn = this.wsService.connect(path, sseUrl);
+      this.connections.set(symbol, conn);
+
+      const sub = conn.messages$.subscribe(msg => {
+        subscriber.next(msg as PriceTick);
       });
-    };
-    source.onerror = () => {
-      source.close();
-      subscriber.complete();
-    };
-    return () => source.close();
+
+      return () => {
+        sub.unsubscribe();
+        conn.disconnect();
+        this.connections.delete(symbol);
+      };
+    });
   }
 }

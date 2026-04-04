@@ -38,6 +38,15 @@ def test_predict_shape(trained_model):
 def test_predict_proba_shape(trained_model):
     model, X = trained_model
     proba = model.predict_proba(X)
+    # Binary model returns 1D P(up) array
+    assert proba.shape == (len(X),)
+    assert proba.min() >= 0.0
+    assert proba.max() <= 1.0
+
+
+def test_predict_proba_3class_shape(trained_model):
+    model, X = trained_model
+    proba = model.predict_proba_3class(X)
     assert proba.shape == (len(X), 3)
     np.testing.assert_allclose(proba.sum(axis=1), 1.0, atol=1e-6)
 

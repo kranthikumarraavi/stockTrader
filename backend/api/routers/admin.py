@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -29,6 +30,7 @@ router = APIRouter(tags=["admin"])
 
 # Track retrain state so the frontend can poll progress
 _retrain_status: dict = {"running": False, "progress": None, "error": None}
+_retrain_lock = threading.Lock()
 
 
 def _require_auth(authorization: str = Header(None)):
@@ -43,14 +45,16 @@ def _run_train_sync() -> dict:
     Auto-downloads missing data from Yahoo Finance if storage/raw/ is empty.
     """
     from backend.prediction_engine.training.trainer import train
-    _retrain_status["progress"] = "downloading_data"
+    with _retrain_lock:
+        _retrain_status["progress"] = "downloading_data"
     return train()
 
 
 @router.get("/retrain/status")
 async def retrain_status():
     """Poll retrain progress without blocking."""
-    return _retrain_status
+    with _retrain_lock:
+        return dict(_retrain_status)
 
 
 @router.post("/retrain")
@@ -60,10 +64,10 @@ async def retrain():
     Training runs in a background thread so the event loop stays responsive
     for live-chart, bot, and other endpoints.
     """
-    if _retrain_status["running"]:
-        return {"message": "Retrain already in progress", "status": "running"}
-
-    _retrain_status.update(running=True, progress="training", error=None)
+    with _retrain_lock:
+        if _retrain_status["running"]:
+            return {"message": "Retrain already in progress", "status": "running"}
+        _retrain_status.update(running=True, progress="training", error=None)
 
     try:
         loop = asyncio.get_event_loop()
@@ -86,7 +90,8 @@ async def retrain():
         mgr.load_latest()
 
         record_retrain("success")
-        _retrain_status.update(running=False, progress="done", error=None)
+        with _retrain_lock:
+            _retrain_status.update(running=False, progress="done", error=None)
 
         return {
             "message": "Retrain completed",
@@ -98,8 +103,10 @@ async def retrain():
         logger.exception("Retrain failed")
         record_retrain("failed")
         capture_exception(exc)
-        _retrain_status.update(running=False, progress="failed", error=str(exc))
-        raise HTTPException(status_code=500, detail=str(exc))
+        with _retrain_lock:
+            _retrain_status.update(running=False, progress="failed", error=str(exc))
+        logger.exception("Internal error in admin endpoint")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/metrics", response_class=PlainTextResponse)

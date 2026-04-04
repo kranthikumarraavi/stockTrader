@@ -1,0 +1,172 @@
+<!-- Options Strategy Builder — Phase 3.6 -->
+<div class="ob">
+
+  <!-- ── Header ── -->
+  <header class="ob__header">
+    <div>
+      <h1 class="ob__title"><i class="bi bi-layers-fill"></i> Options Strategy Builder</h1>
+      <p class="ob__subtitle text-muted">Build, analyze, and visualize options strategies</p>
+    </div>
+  </header>
+
+  <div class="ob__grid">
+
+    <!-- ── Left: Strategy Builder ── -->
+    <section class="ob__builder card">
+      <h2 class="ob__section-title">Parameters</h2>
+
+      <div class="mb-2">
+        <label class="form-label">Underlying</label>
+        <input class="form-control form-control-sm" [(ngModel)]="underlying" placeholder="NIFTY" />
+      </div>
+
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label">Spot Price</label>
+          <input type="number" class="form-control form-control-sm" [(ngModel)]="spot" />
+        </div>
+        <div class="col-6">
+          <label class="form-label">IV (decimal)</label>
+          <input type="number" class="form-control form-control-sm" [(ngModel)]="iv" step="0.01" />
+        </div>
+      </div>
+
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label">Expiry</label>
+          <input type="date" class="form-control form-control-sm" [(ngModel)]="expiry" />
+        </div>
+        <div class="col-6">
+          <label class="form-label">Lot Size</label>
+          <input type="number" class="form-control form-control-sm" [(ngModel)]="lotSize" />
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <label class="form-label">Direction</label>
+          <select class="form-select form-select-sm" [(ngModel)]="direction">
+            <option value="bullish">Bullish</option>
+            <option value="bearish">Bearish</option>
+            <option value="neutral">Neutral</option>
+          </select>
+        </div>
+        <div class="col-6">
+          <label class="form-label">Confidence</label>
+          <input type="number" class="form-control form-control-sm" [(ngModel)]="confidence" min="0" max="1" step="0.05" />
+        </div>
+      </div>
+
+      <button class="btn btn-primary w-100 mb-3" (click)="recommend()" [disabled]="loading">
+        @if (loading) { <span class="spinner-border spinner-border-sm me-1"></span> }
+        <i class="bi bi-magic"></i> Auto-Recommend
+      </button>
+
+      <hr />
+      <h3 class="ob__sub-heading">Quick Build</h3>
+      <div class="ob__quick-btns">
+        <button class="btn btn-sm btn-outline-secondary" (click)="buildQuick('covered-call')">Covered Call</button>
+        <button class="btn btn-sm btn-outline-secondary" (click)="buildQuick('bull-call-spread')">Bull Call Spread</button>
+        <button class="btn btn-sm btn-outline-secondary" (click)="buildQuick('iron-condor')">Iron Condor</button>
+        <button class="btn btn-sm btn-outline-secondary" (click)="buildQuick('straddle')">Long Straddle</button>
+      </div>
+    </section>
+
+    <!-- ── Right: Results ── -->
+    <section class="ob__results">
+
+      @if (loading) {
+        <app-loading-skeleton shape="card" />
+        <app-loading-skeleton shape="chart" />
+      }
+
+      @if (!loading && result) {
+        <!-- Strategy Summary -->
+        <div class="card ob__summary">
+          <div class="ob__summary-header">
+            <app-state-badge [label]="result.strategy_type" variant="info" />
+            <span class="ob__rationale text-muted">{{ result.rationale }}</span>
+          </div>
+
+          <div class="ob__result-cards">
+            @for (card of resultCards; track card.label) {
+              <app-stat-card [label]="card.label" [value]="card.value"
+                             [icon]="card.icon" [trend]="card.trend ?? 'flat'" />
+            }
+          </div>
+
+          @if (result.breakeven.length) {
+            <div class="ob__breakeven">
+              <strong>Breakeven:</strong>
+              @for (b of result.breakeven; track b) {
+                <span class="badge bg-light text-dark font-monospace">₹{{ b | number:'1.2-2' }}</span>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Legs Table -->
+        @if (result.legs.length) {
+          <div class="card ob__legs">
+            <h3 class="ob__sub-heading">Strategy Legs</h3>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th>Instrument</th>
+                    <th>Type</th>
+                    <th class="text-end">Strike</th>
+                    <th>Side</th>
+                    <th class="text-end">Qty</th>
+                    <th class="text-end">Premium</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (leg of result.legs; track trackByLeg($index, leg)) {
+                    <tr>
+                      <td><strong>{{ leg.instrument }}</strong></td>
+                      <td><app-state-badge [label]="leg.option_type" [variant]="legTypeBadge(leg.option_type)" /></td>
+                      <td class="text-end font-monospace">₹{{ leg.strike | number:'1.0-0' }}</td>
+                      <td><app-state-badge [label]="leg.side" [variant]="legSideBadge(leg.side)" /></td>
+                      <td class="text-end">{{ leg.quantity }}</td>
+                      <td class="text-end font-monospace">₹{{ leg.premium | number:'1.2-2' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+
+        <!-- Payoff Diagram -->
+        @if (payoffData.length) {
+          <div class="card ob__payoff">
+            <h3 class="ob__sub-heading">Payoff Diagram</h3>
+            <div class="ob__payoff-chart">
+              @for (point of payoffData; track $index) {
+                <div class="ob__payoff-col">
+                  <div class="ob__payoff-bar"
+                       [style.height.px]="barHeight(point.payoff)"
+                       [style.margin-top.px]="barOffset(point.payoff)"
+                       [class.ob__payoff-bar--profit]="point.payoff >= 0"
+                       [class.ob__payoff-bar--loss]="point.payoff < 0">
+                  </div>
+                  @if (showLabel($index)) {
+                    <span class="ob__payoff-label">{{ point.spot | number:'1.0-0' }}</span>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        }
+      }
+
+      @if (!loading && !result) {
+        <app-empty-state
+          icon="layers-fill"
+          heading="No strategy built yet"
+          message="Configure parameters and click Auto-Recommend or use a Quick Build." />
+      }
+    </section>
+  </div>
+</div>

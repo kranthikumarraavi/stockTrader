@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import pickle
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -65,7 +65,7 @@ class EnsembleModel(BaseModel):
             )
             self._calibrator.fit(X_meta, y)
 
-        self._trained_at = datetime.utcnow()
+        self._trained_at = datetime.now(timezone.utc)
         self._version = f"ensemble_{self._trained_at.strftime('%Y%m%d_%H%M%S')}"
 
     def train(self, X: np.ndarray, y: np.ndarray, params: dict | None = None) -> None:
@@ -78,7 +78,7 @@ class EnsembleModel(BaseModel):
             self._meta_learner, cv=3, method="isotonic"
         )
         self._calibrator.fit(X, y)
-        self._trained_at = datetime.utcnow()
+        self._trained_at = datetime.now(timezone.utc)
         self._version = f"ensemble_{self._trained_at.strftime('%Y%m%d_%H%M%S')}"
 
     def predict(self, X: np.ndarray) -> np.ndarray:

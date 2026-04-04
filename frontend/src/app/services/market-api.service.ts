@@ -2,19 +2,22 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { MarketStatus, AccountProfile } from '../core/models';
-import { BotStatus } from '../core/models';
+import { retry } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
+import { MarketStatus, AccountProfile, BotStatus, BotConfig } from '../core/models';
 
 export { MarketStatus, AccountProfile, BotStatus };
 
 @Injectable({ providedIn: 'root' })
 export class MarketApiService {
-  private readonly base = '/api/v1';
+  private readonly base = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 
   getMarketStatus(): Observable<MarketStatus> {
-    return this.http.get<MarketStatus>(`${this.base}/market/status`);
+    return this.http.get<MarketStatus>(`${this.base}/market/status`).pipe(
+      retry({ count: 2, delay: 1000 }),
+    );
   }
 
   getAccountProfile(): Observable<AccountProfile> {
@@ -25,19 +28,19 @@ export class MarketApiService {
     return this.http.get<BotStatus>(`${this.base}/bot/status`);
   }
 
-  startBot(config?: any): Observable<any> {
-    return this.http.post(`${this.base}/bot/start`, config || {});
+  startBot(config?: Partial<BotConfig>): Observable<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(`${this.base}/bot/start`, config || {});
   }
 
-  stopBot(): Observable<any> {
-    return this.http.post(`${this.base}/bot/stop`, {});
+  stopBot(): Observable<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(`${this.base}/bot/stop`, {});
   }
 
-  updateBotConfig(config: any): Observable<any> {
-    return this.http.put(`${this.base}/bot/config`, config);
+  updateBotConfig(config: Partial<BotConfig>): Observable<Record<string, unknown>> {
+    return this.http.put<Record<string, unknown>>(`${this.base}/bot/config`, config);
   }
 
-  botConsent(resume: boolean): Observable<any> {
-    return this.http.post(`${this.base}/bot/consent`, { resume });
+  botConsent(resume: boolean): Observable<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(`${this.base}/bot/consent`, { resume });
   }
 }

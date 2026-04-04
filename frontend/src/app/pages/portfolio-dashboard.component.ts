@@ -26,10 +26,7 @@ import {
   PricePoint,
 } from '../shared';
 
-// ── View Models ────────────────────────────────────────────
-
-interface KvEntry { key: string; value: number; }
-interface ExposureCategory { key: string; entries: KvEntry[]; }
+import { KvEntry, ExposureCategory } from '../core/models';
 
 @Component({
   selector: 'app-portfolio-dashboard',
@@ -73,6 +70,7 @@ export class PortfolioDashboardComponent implements OnInit, OnDestroy {
   loadingPositions = true;
   loadingExposure = true;
   loadingAllocation = true;
+  loadError = false;
   lastRefresh = '';
 
   private destroy$ = new Subject<void>();
@@ -154,57 +152,48 @@ export class PortfolioDashboardComponent implements OnInit, OnDestroy {
     this.loadingPositions = true;
     this.loadingExposure = true;
     this.loadingAllocation = true;
+    this.loadError = false;
     this.cdr.markForCheck();
 
-    // Metrics
-    this.portfolioApi.computeMetrics({
-      equity_curve: [],
-      trades: [],
-      positions: {},
-      cash: 100000,
-      initial_capital: 100000,
-    }).pipe(
+    // Single snapshot call aggregates all paper account data through analytics
+    this.portfolioApi.getSnapshot().pipe(
       catchError(() => of(null)),
       takeUntil(this.destroy$),
-    ).subscribe(m => {
-      if (m) {
-        this.metrics = m;
-        this.processAttribution(m);
+    ).subscribe(snapshot => {
+      if (!snapshot) {
+        this.loadError = true;
+        this.loadingMetrics = false;
+        this.loadingPositions = false;
+        this.loadingExposure = false;
+        this.loadingAllocation = false;
+        this.lastRefresh = new Date().toLocaleTimeString('en-IN');
+        this.cdr.markForCheck();
+        return;
+      }
+
+      // Metrics
+      const m = snapshot['metrics'] as Record<string, any> | undefined;
+      if (m && !m['error']) {
+        this.metrics = m as unknown as PortfolioMetrics;
+        this.processAttribution(this.metrics);
       }
       this.loadingMetrics = false;
-      this.lastRefresh = new Date().toLocaleTimeString('en-IN');
-      this.cdr.markForCheck();
-    });
 
-    // Daily summary (positions + holdings + equity curve)
-    this.portfolioApi.getDailySummary({
-      positions: {},
-      cash: 100000,
-    }).pipe(
-      catchError(() => of(null)),
-      takeUntil(this.destroy$),
-    ).subscribe(data => {
-      if (data) {
-        this.positions = (data.positions ?? []) as Position[];
-        this.holdings = (data.holdings ?? []) as Holding[];
-        const curve = (data.equity_curve ?? []) as { date: string; equity: number }[];
-        this.equityCurve = curve.map(p => ({
-          time: p.date,
-          value: p.equity,
-        }));
-      }
+      // Positions & Holdings & Equity Curve
+      this.positions = (snapshot['positions'] ?? []) as Position[];
+      this.holdings = (snapshot['holdings'] ?? []) as Holding[];
+      const curve = (snapshot['equity_curve'] ?? []) as { date: string; equity: number }[];
+      this.equityCurve = curve.map(p => ({
+        time: p.date,
+        value: p.equity,
+      }));
       this.loadingPositions = false;
-      this.cdr.markForCheck();
-    });
 
-    // Exposure
-    this.portfolioApi.getExposureHeatmap({}).pipe(
-      catchError(() => of(null)),
-      takeUntil(this.destroy$),
-    ).subscribe(d => {
-      if (d) {
-        this.exposure = d;
-        this.exposureCategories = Object.entries(d)
+      // Exposure
+      const exp = snapshot['exposure'] as Record<string, any> | undefined;
+      if (exp) {
+        this.exposure = exp;
+        this.exposureCategories = Object.entries(exp)
           .filter(([, val]) => val && typeof val === 'object')
           .map(([key, val]) => ({
             key,
@@ -214,24 +203,18 @@ export class PortfolioDashboardComponent implements OnInit, OnDestroy {
           }));
       }
       this.loadingExposure = false;
-      this.cdr.markForCheck();
-    });
 
-    // Allocation
-    this.portfolioApi.getCapitalAllocation({
-      total_capital: 100000,
-      current_positions: {},
-    }).pipe(
-      catchError(() => of(null)),
-      takeUntil(this.destroy$),
-    ).subscribe(d => {
-      if (d) {
-        this.allocation = d;
-        this.allocationEntries = Object.entries(d)
+      // Allocation
+      const alloc = snapshot['allocation'] as Record<string, any> | undefined;
+      if (alloc) {
+        this.allocation = alloc;
+        this.allocationEntries = Object.entries(alloc)
           .filter(([, v]) => typeof v === 'number')
           .map(([key, value]) => ({ key, value: value as number }));
       }
       this.loadingAllocation = false;
+
+      this.lastRefresh = new Date().toLocaleTimeString('en-IN');
       this.cdr.markForCheck();
     });
   }

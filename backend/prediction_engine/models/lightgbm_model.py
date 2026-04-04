@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 import pickle
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +32,7 @@ class LightGBMModel(BaseModel):
         params: dict | None = None,
     ) -> None:
         self._seed = seed
-        self._version = version or datetime.utcnow().strftime("v%Y%m%d.%H%M%S")
+        self._version = version or datetime.now(timezone.utc).strftime("v%Y%m%d.%H%M%S")
         self._model: lgb.Booster | None = None  # type: ignore[name-defined]
         self._params = params or self._default_params()
         self._metrics: dict = {}
@@ -114,16 +114,16 @@ class LightGBMModel(BaseModel):
         """Return 3-class labels: 0=sell, 1=hold, 2=buy.
 
         Binary model predicts P(up). Map to 3 classes using confidence:
-        - P(up) > 0.55 â†’ buy (2)
-        - P(up) < 0.45 â†’ sell (0)
-        - otherwise â†’ hold (1)
+        - P(up) > 0.52 → buy (2)
+        - P(up) < 0.48 → sell (0)
+        - otherwise → hold (1)
         """
         proba_up = self.predict_proba(X)
         if proba_up.ndim == 2:
             proba_up = proba_up[:, 1] if proba_up.shape[1] == 2 else proba_up[:, 0]
         labels = np.ones(len(proba_up), dtype=int)  # default hold
-        labels[proba_up > 0.55] = 2   # buy
-        labels[proba_up < 0.45] = 0   # sell
+        labels[proba_up > 0.52] = 2   # buy
+        labels[proba_up < 0.48] = 0   # sell
         return labels
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
@@ -149,10 +149,10 @@ class LightGBMModel(BaseModel):
         result = np.zeros((n, 3))
         for i, p_up in enumerate(proba_up):
             p_down = 1 - p_up
-            if p_up > 0.55:
-                result[i] = [0.1, 0.2, 0.7 * (p_up / 0.55)]  # buy-leaning
-            elif p_up < 0.45:
-                result[i] = [0.7 * (p_down / 0.55), 0.2, 0.1]  # sell-leaning
+            if p_up > 0.52:
+                result[i] = [0.1, 0.2, 0.7 * (p_up / 0.52)]  # buy-leaning
+            elif p_up < 0.48:
+                result[i] = [0.7 * (p_down / 0.52), 0.2, 0.1]  # sell-leaning
             else:
                 result[i] = [0.2, 0.6, 0.2]  # hold
             result[i] /= result[i].sum()  # normalize
@@ -177,13 +177,13 @@ class LightGBMModel(BaseModel):
             p_down = 1 - p_up
 
             # Cost-aware thresholds
-            buy_threshold = 0.55
-            sell_threshold = 0.45
+            buy_threshold = 0.52
+            sell_threshold = 0.48
             if price is not None and quantity > 0:
                 breakeven = estimate_breakeven_move(price, quantity, TradeType.INTRADAY)
                 breakeven_pct = breakeven / price if price > 0 else 0
-                buy_threshold = min(0.70, 0.55 + breakeven_pct * 3)
-                sell_threshold = max(0.30, 0.45 - breakeven_pct * 3)
+                buy_threshold = min(0.70, 0.52 + breakeven_pct * 3)
+                sell_threshold = max(0.30, 0.48 - breakeven_pct * 3)
 
             if p_up > buy_threshold:
                 action = "buy"
@@ -227,7 +227,7 @@ class LightGBMModel(BaseModel):
             "seed": self._seed,
             "params": self._params,
             "metrics": self._metrics,
-            "saved_at": datetime.utcnow().isoformat() + "Z",
+            "saved_at": datetime.now(timezone.utc).isoformat() + "Z",
         }
         meta_file.write_text(json.dumps(meta, indent=2))
         return path

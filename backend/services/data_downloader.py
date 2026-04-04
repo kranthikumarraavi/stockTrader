@@ -24,7 +24,7 @@ _YF_INDEX_MAP: dict[str, str] = {
 # Symbols that use .BO (BSE) instead of .NS
 _YF_BSE_SYMBOLS: set[str] = {"SENSEX"}
 
-STORAGE_DIR = Path("storage/raw")
+STORAGE_DIR = Path(__file__).resolve().parents[2] / "storage" / "raw"
 HISTORY_YEARS = 2  # download 2 years of daily data
 STALE_HOURS = 18   # re-download if CSV is older than 18 hours
 
@@ -35,6 +35,8 @@ def _yf_ticker(symbol: str) -> str:
         return _YF_INDEX_MAP[symbol]
     # M&M style underscores -> hyphens for yfinance
     clean = symbol.replace("_", "&")
+    if clean.endswith(".NS") or clean.endswith(".BO"):
+        return clean
     return f"{clean}.NS"
 
 
@@ -135,11 +137,21 @@ def refresh_all_symbols(
 
 
 def get_all_symbols() -> list[str]:
-    """Return all tracked symbols across all categories."""
+    """Return all tracked symbols: predefined categories + any user-added CSVs."""
     from backend.services.price_feed import SYMBOL_CATEGORIES
     all_syms: list[str] = []
     for syms in SYMBOL_CATEGORIES.values():
         all_syms.extend(syms)
+
+    # Also include any user-added symbols that have CSV data on disk
+    try:
+        for csv_path in STORAGE_DIR.glob("*.csv"):
+            sym = csv_path.stem
+            if sym and sym != ".gitkeep":
+                all_syms.append(sym)
+    except OSError:
+        pass
+
     # Deduplicate while preserving order
     seen: set[str] = set()
     unique: list[str] = []

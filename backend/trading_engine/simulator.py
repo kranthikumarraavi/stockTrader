@@ -11,7 +11,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, asdict, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -67,7 +67,7 @@ class PaperSimulator:
 
     def execute_intent(self, intent: OrderIntent, market_price: float) -> Fill | None:
         """Attempt to fill an order intent at the given market price."""
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).isoformat() + "Z"
 
         self._log(now, "ORDER_RECEIVED", asdict(intent))
 

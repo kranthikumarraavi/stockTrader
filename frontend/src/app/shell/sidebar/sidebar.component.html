@@ -8,16 +8,17 @@
 </div>
 
 <!-- Navigation groups -->
-<nav class="sidebar-nav">
+<nav class="sidebar-nav" aria-label="Main navigation">
   @for (group of groups; track group.heading) {
-    <div class="nav-group-heading">{{ group.heading }}</div>
+    <div class="nav-group-heading" role="heading" aria-level="2">{{ group.heading }}</div>
     @for (item of group.items; track item.route) {
       <a class="nav-item"
          [routerLink]="item.route"
          routerLinkActive="active"
          [routerLinkActiveOptions]="{ exact: item.route === '/' }"
-         (click)="onNavClick()">
-        <i class="bi nav-icon" [ngClass]="'bi-' + item.icon"></i>
+         (click)="onNavClick()"
+         [attr.aria-label]="item.label">
+        <i class="bi nav-icon" [ngClass]="'bi-' + item.icon" aria-hidden="true"></i>
         <span class="nav-label">{{ item.label }}</span>
       </a>
     }

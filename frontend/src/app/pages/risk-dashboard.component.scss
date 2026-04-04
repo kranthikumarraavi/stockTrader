@@ -1,0 +1,184 @@
+@use '../../variables' as *;
+
+.rd {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  // ── Header ──
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i { color: $warning; }
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    margin: 0.125rem 0 0;
+  }
+
+  // ── Skeleton ──
+  &__skeleton-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+  }
+
+  // ── Status Cards ──
+  &__status-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+
+  // ── Badges ──
+  &__badges {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  &__capital-bar {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  &__capital-label {
+    font-size: 0.75rem;
+    color: $secondary;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    display: block;
+  }
+
+  // ── Bar ──
+  &__bar-track {
+    height: 8px;
+    background: lighten($border-color, 5%);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  &__bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+
+    &--ok { background: $success; }
+    &--warn { background: $warning; }
+    &--danger { background: $danger; }
+  }
+
+  // ── Mid Grid ──
+  &__mid-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  &__exposure,
+  &__greeks {
+    padding: 1rem;
+  }
+
+  &__section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i {
+      font-size: 1rem;
+      color: $secondary;
+    }
+  }
+
+  // ── Exposure ──
+  &__exposure-row {
+    margin-bottom: 0.625rem;
+  }
+
+  &__exposure-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.125rem;
+  }
+
+  &__exposure-name {
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  &__exposure-pct {
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  // ── Greeks ──
+  &__greeks-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+
+  &__greek-card {
+    background: lighten($border-color, 8%);
+    border-radius: $border-radius;
+    padding: 0.625rem 0.75rem;
+  }
+
+  &__greek-label {
+    font-size: 0.75rem;
+    color: $secondary;
+    text-transform: capitalize;
+    margin-bottom: 0.25rem;
+  }
+
+  &__greek-value {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  // ── Snapshots ──
+  &__snapshots {
+    padding: 1rem;
+    overflow: hidden;
+  }
+
+  &__snapshot-data {
+    font-size: 0.75rem;
+    font-family: $font-family-monospace;
+    color: $secondary;
+    max-width: 400px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 992px) {
+  .rd__skeleton-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .rd__mid-grid {
+    grid-template-columns: 1fr;
+  }
+}

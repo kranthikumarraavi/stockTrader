@@ -1,3 +1,6 @@
+<!-- Skip to content (accessible keyboard navigation) -->
+<a class="skip-to-content" href="#main-content">Skip to content</a>
+
 <!-- Shell body: sidebar + content -->
 <div class="shell-body">
   <!-- Sidebar -->
@@ -20,12 +23,14 @@
   <!-- Content column -->
   <div class="shell-content">
     <app-topbar
+      [darkMode]="darkMode"
       (menuToggle)="mobileMenuOpen = !mobileMenuOpen"
       (quickTrade)="onQuickTrade()"
-      (refresh)="onRefresh()">
+      (refresh)="onRefresh()"
+      (toggleTheme)="toggleDarkMode()">
     </app-topbar>
 
-    <main class="shell-page">
+    <main class="shell-page" id="main-content" role="main">
       <router-outlet />
     </main>
 

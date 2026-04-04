@@ -4,7 +4,14 @@
 }
 
 <div class="mo">
-
+  <!-- ── Error Banner ── -->
+  @if (loadError) {
+    <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>Failed to load market data.</span>
+      <button class="btn btn-sm btn-outline-danger ms-auto" (click)="refresh()">Retry</button>
+    </div>
+  }
   <!-- ── Page Header ─────────────────────────────────────── -->
   <header class="mo__header">
     <div class="mo__header-left">
@@ -381,7 +388,7 @@
         <app-empty-state icon="newspaper" title="No alerts" message="No recent alerts or events" [compact]="true" />
       } @else {
         <div class="mo__news-list">
-          @for (n of news; track $index) {
+          @for (n of news; track n.title) {
             <div class="mo__news-row">
               <div class="mo__news-left">
                 @if (n.sentiment === 'high' || n.sentiment === 'critical') {

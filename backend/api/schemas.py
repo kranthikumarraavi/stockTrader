@@ -354,6 +354,8 @@ class BacktestTrade(BaseModel):
     quantity: int
     price: float
     pnl: float
+    charges: float = 0.0
+    exit_reason: str = ""
 
 
 class BacktestResultsResponse(BaseModel):
@@ -368,7 +370,17 @@ class BacktestResultsResponse(BaseModel):
     final_value: float
     total_return_pct: float
     sharpe_ratio: Optional[float] = None
+    sortino_ratio: Optional[float] = None
     max_drawdown_pct: Optional[float] = None
+    cagr_pct: Optional[float] = None
+    total_charges: float = 0.0
+    win_rate: Optional[float] = None
+    avg_win: Optional[float] = None
+    avg_loss: Optional[float] = None
+    expectancy: Optional[float] = None
+    total_trades: int = 0
+    no_trade_count: int = 0
+    rejection_count: int = 0
     trades: list[BacktestTrade]
     completed_at: Optional[datetime] = None
 

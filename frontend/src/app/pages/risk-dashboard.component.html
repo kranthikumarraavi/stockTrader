@@ -1,0 +1,143 @@
+<!-- Risk Dashboard — Phase 3.7 -->
+<div class="rd">
+
+  <!-- ── Error Banner ── -->
+  @if (loadError && !loading) {
+    <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>Failed to load risk data.</span>
+      <button class="btn btn-sm btn-outline-danger ms-auto" (click)="loadAll()">Retry</button>
+    </div>
+  }
+
+  <!-- ── Header ── -->
+  <header class="rd__header">
+    <div>
+      <h1 class="rd__title"><i class="bi bi-shield-exclamation"></i> Risk Dashboard</h1>
+      <p class="rd__subtitle text-muted">Real-time risk monitoring, exposure, and circuit breaker status</p>
+    </div>
+  </header>
+
+  @if (loading) {
+    <div class="rd__skeleton-grid">
+      <app-loading-skeleton shape="card" />
+      <app-loading-skeleton shape="card" />
+      <app-loading-skeleton shape="card" />
+      <app-loading-skeleton shape="card" />
+    </div>
+    <app-loading-skeleton shape="table" />
+  } @else {
+
+    <!-- ── Status Cards ── -->
+    @if (status) {
+      <div class="rd__status-cards">
+        @for (card of statusCards; track card.label) {
+          <app-stat-card [label]="card.label" [value]="card.value"
+                         [icon]="card.icon" [trend]="card.trend ?? 'flat'" />
+        }
+      </div>
+
+      <!-- Circuit Breaker Badges -->
+      <div class="rd__badges">
+        <app-state-badge
+          [label]="status.circuit_breaker_active ? 'Circuit Breaker: ACTIVE' : 'Circuit Breaker: OK'"
+          [variant]="circuitBadge" />
+        <app-state-badge
+          [label]="status.daily_loss_lockout ? 'Daily Loss Lockout: LOCKED' : 'Daily Loss Lockout: OK'"
+          [variant]="lockoutBadge" />
+        <div class="rd__capital-bar">
+          <span class="rd__capital-label">Capital Used {{ capitalUsedPct | number:'1.0-0' }}%</span>
+          <div class="rd__bar-track">
+            <div class="rd__bar-fill"
+                 [style.width.%]="capitalUsedPct"
+                 [ngClass]="barClass(capitalUsedPct)">
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- ── Middle Grid: Exposure + Greeks ── -->
+    <div class="rd__mid-grid">
+
+      <!-- Sector Exposure -->
+      <section class="card rd__exposure">
+        <h2 class="rd__section-title">
+          <i class="bi bi-pie-chart-fill"></i> Sector Exposure
+        </h2>
+
+        @if (sectorExposure.length === 0) {
+          <app-empty-state icon="pie-chart" heading="No exposure data" message="Exposure data will appear when you have positions." />
+        } @else {
+          @for (item of sectorExposure; track item.key) {
+            <div class="rd__exposure-row">
+              <div class="rd__exposure-meta">
+                <span class="rd__exposure-name">{{ item.key }}</span>
+                <span class="rd__exposure-pct font-monospace">{{ item.value | number:'1.1-1' }}%</span>
+              </div>
+              <div class="rd__bar-track">
+                <div class="rd__bar-fill"
+                     [style.width.%]="item.value"
+                     [ngClass]="barClass(item.value)">
+                </div>
+              </div>
+            </div>
+          }
+        }
+      </section>
+
+      <!-- Portfolio Greeks -->
+      <section class="card rd__greeks">
+        <h2 class="rd__section-title">
+          <i class="bi bi-calculator"></i> Portfolio Greeks
+        </h2>
+
+        @if (greeksEntries.length === 0) {
+          <app-empty-state icon="calculator" heading="No Greeks data" message="Greek sensitivities appear with options positions." />
+        } @else {
+          <div class="rd__greeks-grid">
+            @for (g of greeksEntries; track g.key) {
+              <div class="rd__greek-card">
+                <div class="rd__greek-label">{{ g.key }}</div>
+                <div class="rd__greek-value font-monospace">{{ g.value | number:'1.4-4' }}</div>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    </div>
+
+    <!-- ── Snapshots ── -->
+    <section class="card rd__snapshots">
+      <h2 class="rd__section-title">
+        <i class="bi bi-clock-history"></i> Recent Risk Snapshots
+      </h2>
+
+      @if (snapshots.length === 0) {
+        <app-empty-state icon="clock-history" heading="No snapshots yet" message="Risk snapshots are captured periodically during trading." />
+      } @else {
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Type</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (s of snapshots; track $index) {
+                <tr>
+                  <td class="font-monospace">{{ s.timestamp }}</td>
+                  <td><app-state-badge [label]="s.snapshot_type" variant="info" /></td>
+                  <td class="rd__snapshot-data">{{ s.data | json }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+
+  }
+</div>

@@ -12,9 +12,11 @@ import { MarketApiService } from '../../services/market-api.service';
   styleUrl: './topbar.component.scss',
 })
 export class TopbarComponent implements OnInit, OnDestroy {
+  @Input() darkMode = false;
   @Output() menuToggle = new EventEmitter<void>();
   @Output() quickTrade = new EventEmitter<void>();
   @Output() refresh = new EventEmitter<void>();
+  @Output() toggleTheme = new EventEmitter<void>();
 
   searchQuery = '';
   marketPhase = 'closed';

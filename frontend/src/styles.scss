@@ -97,6 +97,10 @@ html, body {
   padding: 1.5rem;
   max-width: 1440px;
   margin: 0 auto;
+
+  @media (max-width: 767.98px) {
+    padding: 1rem 0.75rem;
+  }
 }
 
 // ----- Tab override for trading-style tabs -----
@@ -171,3 +175,108 @@ html, body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #a1a1a1; }
+
+// ============================================================
+// Dark theme overrides  — activated via [data-bs-theme="dark"]
+// ============================================================
+[data-bs-theme="dark"] {
+  --color-bg:              #{$dark-body-bg};
+  --color-surface:         #{$dark-card-bg};
+  --color-surface-hover:   #{$dark-surface-hover};
+  --color-text:            #{$dark-body-color};
+  --color-text-secondary:  #9e9e9e;
+  --color-border:          #{$dark-border};
+  --color-primary-light:   #{rgba($primary, 0.15)};
+  --shadow-sm:             0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow:                0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg:             0 4px 16px rgba(0, 0, 0, 0.5);
+
+  .card, .dropdown-menu { background: $dark-card-bg; border-color: $dark-border; }
+  .table { --bs-table-bg: transparent; --bs-table-color: #{$dark-body-color}; }
+  .table-striped > tbody > tr:nth-of-type(odd) > * { --bs-table-striped-bg: #{rgba(#fff, 0.03)}; }
+  .table-hover > tbody > tr:hover > * { --bs-table-hover-bg: #{rgba(#fff, 0.05)}; }
+  input, select, textarea, .form-control, .form-select {
+    background-color: #2a2a2a;
+    border-color: $dark-border;
+    color: $dark-body-color;
+  }
+  ::-webkit-scrollbar-thumb { background: #555; }
+  ::-webkit-scrollbar-thumb:hover { background: #777; }
+}
+
+// ============================================================
+// Accessibility & focus
+// ============================================================
+:focus-visible {
+  outline: 2px solid $primary;
+  outline-offset: 2px;
+}
+
+// Skip-to-content link (SR + keyboard only)
+.skip-to-content {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 9999;
+
+  &:focus {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    width: auto;
+    height: auto;
+    padding: 0.5rem 1rem;
+    background: $primary;
+    color: #fff;
+    border-radius: $border-radius;
+    font-weight: 600;
+    z-index: 10001;
+  }
+}
+
+// ============================================================
+// Responsive table wrapper
+// ============================================================
+.table-responsive-auto {
+  @media (max-width: 767.98px) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+// ============================================================
+// Table readability
+// ============================================================
+.table th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.table td {
+  vertical-align: middle;
+}
+.table .text-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+// ============================================================
+// Keyboard shortcut hint badge
+// ============================================================
+.kbd-hint {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  font-family: $font-family-monospace;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  line-height: 1.4;
+  vertical-align: middle;
+}

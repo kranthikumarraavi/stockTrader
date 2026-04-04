@@ -13,10 +13,8 @@ export const adminGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
 
   if (!auth.isAuthenticated) {
-    // TODO: enforce strictly once auth backend is wired
-    // notify.warning('Authentication required to access system administration.');
-    // return router.createUrlTree(['/auth/login'], { queryParams: { returnUrl: state.url } });
-    return true;
+    notify.warning('Authentication required to access system administration.');
+    return router.createUrlTree(['/auth/login'], { queryParams: { returnUrl: state.url } });
   }
 
   // TODO: add role check when backend supports user roles

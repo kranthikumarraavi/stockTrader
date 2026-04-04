@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -343,11 +344,14 @@ class AnomalyDetector:
 
 
 _anomaly_detector: AnomalyDetector | None = None
+_anomaly_detector_lock = threading.Lock()
 
 
 def get_anomaly_detector() -> AnomalyDetector:
     """Module-level singleton accessor."""
     global _anomaly_detector
     if _anomaly_detector is None:
-        _anomaly_detector = AnomalyDetector()
+        with _anomaly_detector_lock:
+            if _anomaly_detector is None:
+                _anomaly_detector = AnomalyDetector()
     return _anomaly_detector

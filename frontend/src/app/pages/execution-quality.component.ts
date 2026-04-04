@@ -1,7 +1,9 @@
 // Execution quality page component
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Subject, takeUntil, timer } from 'rxjs';
 import { ExecutionApiService } from '../services/execution-api.service';
+import { NotificationService } from '../services/notification.service';
 
 @Component({
   selector: 'app-execution-quality',
@@ -82,29 +84,44 @@ export class ExecutionQualityComponent implements OnInit, OnDestroy {
   stats: any | null = null;
   statsEntries: { key: string; value: any }[] = [];
   reports: any[] | null = null;
+  loadError = false;
 
-  private timer: any;
+  private destroy$ = new Subject<void>();
 
-  constructor(private execApi: ExecutionApiService) {}
+  constructor(
+    private execApi: ExecutionApiService,
+    private notify: NotificationService,
+  ) {}
 
   ngOnInit(): void {
     this.loadAll();
-    this.timer = setInterval(() => this.loadAll(), 15_000);
+    timer(15_000, 15_000).pipe(takeUntil(this.destroy$)).subscribe(() => this.loadAll());
   }
 
   ngOnDestroy(): void {
-    clearInterval(this.timer);
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   loadAll(): void {
-    this.execApi.getStats().subscribe({
+    this.loadError = false;
+    this.execApi.getStats().pipe(takeUntil(this.destroy$)).subscribe({
       next: s => {
         this.stats = s;
         this.statsEntries = Object.entries(s || {}).map(([key, value]) => ({ key, value }));
       },
-      error: () => {}
+      error: () => {
+        this.loadError = true;
+        this.notify.error('Failed to load execution stats.');
+      }
     });
-    this.execApi.getRecentReports().subscribe({ next: d => this.reports = d, error: () => {} });
+    this.execApi.getRecentReports().pipe(takeUntil(this.destroy$)).subscribe({
+      next: d => this.reports = d,
+      error: () => {
+        this.loadError = true;
+        this.notify.error('Failed to load execution reports.');
+      }
+    });
   }
 
   formatLabel(key: string): string {

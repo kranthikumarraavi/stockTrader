@@ -1,0 +1,144 @@
+@use '../../variables' as *;
+
+.bt {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    i { color: $primary; }
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    margin: 0.125rem 0 0;
+  }
+
+  &__section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    i { color: $secondary; font-size: 1rem; }
+  }
+
+  // ── Form ──
+  &__form {
+    padding: 1rem;
+  }
+
+  &__field {
+    margin-bottom: 0.625rem;
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: $secondary;
+      margin-bottom: 0.125rem;
+    }
+  }
+
+  &__form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  &__form-actions {
+    margin-top: 0.5rem;
+  }
+
+  // ── Pending ──
+  &__pending {
+    padding: 1rem;
+  }
+
+  &__pending-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  // ── Results ──
+  &__results {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  &__card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+
+  // ── Equity ──
+  &__equity {
+    padding: 1rem;
+  }
+
+  &__chart-wrap {
+    height: 320px;
+    min-height: 200px;
+  }
+
+  // ── Stats ──
+  &__stats {
+    padding: 1rem;
+  }
+
+  &__stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.5rem;
+  }
+
+  &__stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    font-size: 0.8125rem;
+
+    strong {
+      font-size: 0.9375rem;
+      font-family: $font-family-monospace;
+    }
+  }
+
+  // ── Trades ──
+  &__trades {
+    padding: 1rem;
+  }
+
+  &__pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid $border-color;
+  }
+}
+
+@media (max-width: 768px) {
+  .bt__form-row {
+    grid-template-columns: 1fr;
+  }
+  .bt__card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

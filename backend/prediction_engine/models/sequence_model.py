@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import pickle
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -142,7 +142,7 @@ class SequenceModel(BaseModel):
             if (epoch + 1) % 5 == 0:
                 logger.info("Epoch %d/%d loss=%.4f", epoch + 1, p["epochs"], total_loss / len(loader))
 
-        self._trained_at = datetime.utcnow()
+        self._trained_at = datetime.now(timezone.utc)
         self._version = f"lstm_{self._trained_at.strftime('%Y%m%d_%H%M%S')}"
 
     def predict(self, X: np.ndarray) -> np.ndarray:

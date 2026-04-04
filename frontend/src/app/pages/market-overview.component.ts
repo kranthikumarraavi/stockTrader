@@ -39,37 +39,13 @@ import {
   BadgeVariant,
 } from '../shared';
 
-// ── View Models ─────────────────────────────────────────────
-
-interface IndexCard {
-  symbol: string;
-  displayName: string;
-  price: number;
-  change: number;
-  changePct: number;
-  sparkline: number[];
-}
-
-interface MoverRow {
-  symbol: string;
-  price: number;
-  change: number;
-  changePct: number;
-  volume: number;
-}
-
-interface SectorPerf {
-  sector: string;
-  changePct: number;
-  symbolCount: number;
-}
-
-interface RegimeCard {
-  symbol: string;
-  regime: string;
-  confidence: number;
-  volatility: number;
-}
+import {
+  IndexCard,
+  MoverRow,
+  SectorPerf,
+  RegimeCard,
+  MarketBreadth,
+} from '../core/models';
 
 interface NewsItem {
   title: string;
@@ -77,14 +53,6 @@ interface NewsItem {
   url: string;
   publishedAt: string;
   sentiment?: string;
-}
-
-interface MarketBreadth {
-  advances: number;
-  declines: number;
-  unchanged: number;
-  total: number;
-  advanceRatio: number;
 }
 
 // ── Index display-name map ──
@@ -140,6 +108,7 @@ export class MarketOverviewComponent implements OnInit, OnDestroy {
   loadingOverview = true;
   loadingRegime = true;
   loadingNews = true;
+  loadError = false;
   wsConnected = false;
   totalSymbols = 0;
   lastRefresh = '';
@@ -258,6 +227,7 @@ export class MarketOverviewComponent implements OnInit, OnDestroy {
     this.loadingOverview = true;
     this.loadingRegime = true;
     this.loadingNews = true;
+    this.loadError = false;
     this.cdr.markForCheck();
 
     // Parallel: market status + feed status
@@ -267,6 +237,7 @@ export class MarketOverviewComponent implements OnInit, OnDestroy {
     }).pipe(takeUntil(this.destroy$)).subscribe(({ market, feed }) => {
       if (market) this.marketStatus = market;
       if (feed) this.feedStatus = feed;
+      if (!market && !feed) this.loadError = true;
       this.loadingMarket = false;
       this.lastRefresh = new Date().toLocaleTimeString('en-IN');
       this.cdr.markForCheck();

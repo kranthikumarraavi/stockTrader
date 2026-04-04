@@ -1,0 +1,30 @@
+<!-- Auth Callback — Phase 5.1 -->
+<div class="cb">
+  <div class="cb__card">
+    <div class="cb__icon">
+      @if (status === 'processing') {
+        <span class="spinner-border text-primary cb__spinner"></span>
+      }
+      @if (status === 'success') {
+        <i class="bi bi-check-circle-fill text-success cb__status-icon"></i>
+      }
+      @if (status === 'error') {
+        <i class="bi bi-x-circle-fill text-danger cb__status-icon"></i>
+      }
+    </div>
+
+    <h2 class="cb__title">
+      @if (status === 'processing') { Authenticating… }
+      @if (status === 'success') { Success }
+      @if (status === 'error') { Authentication Failed }
+    </h2>
+
+    <p class="cb__message text-muted">{{ message }}</p>
+
+    @if (status === 'error') {
+      <button class="btn btn-primary cb__action" (click)="goToLogin()">
+        <i class="bi bi-arrow-left"></i> Back to Login
+      </button>
+    }
+  </div>
+</div>

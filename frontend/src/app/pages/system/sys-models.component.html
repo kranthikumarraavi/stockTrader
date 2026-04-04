@@ -1,0 +1,46 @@
+<!-- System > Models -->
+@if (loading) {
+  <app-loading-skeleton shape="card" />
+  <app-loading-skeleton shape="card" />
+}
+
+@if (!loading && model) {
+  <div class="sm__grid">
+    <app-stat-card label="Model Version" [value]="model.model_version" icon="cpu" />
+    <div class="card sm__status-card">
+      <span class="text-muted" style="font-size:0.75rem;font-weight:600">Status</span>
+      <app-state-badge [label]="model.status" [variant]="statusBadge" />
+    </div>
+    <app-stat-card label="Accuracy"
+      [value]="model.accuracy !== null ? (model.accuracy * 100 | number:'1.1-1') + '%' : 'N/A'"
+      icon="bullseye" />
+    <app-stat-card label="Last Trained"
+      [value]="model.last_trained ? (model.last_trained | date:'medium') ?? 'N/A' : 'N/A'"
+      icon="clock-history" />
+  </div>
+
+  <section class="card sm__actions">
+    <h3 class="sm__section-title"><i class="bi bi-lightning-fill"></i> Actions</h3>
+    <div class="sm__btn-row">
+      <button class="btn btn-primary btn-sm" (click)="reload()" [disabled]="reloading">
+        @if (reloading) { <span class="spinner-border spinner-border-sm"></span> }
+        Hot Reload Model
+      </button>
+      <button class="btn btn-success btn-sm" (click)="retrain()"
+              [disabled]="retraining || !auth.isAuthenticated">
+        @if (retraining) { <span class="spinner-border spinner-border-sm"></span> }
+        Trigger Retrain
+      </button>
+      <button class="btn btn-outline-secondary btn-sm" (click)="load()">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+    </div>
+  </section>
+}
+
+@if (!loading && !model) {
+  <div class="alert alert-warning d-flex align-items-center gap-2">
+    <i class="bi bi-exclamation-triangle"></i> Could not load model status.
+    <button class="btn btn-sm btn-outline-warning" (click)="load()">Retry</button>
+  </div>
+}

@@ -1,99 +1,164 @@
-// Paper dashboard page component
-import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {
+  Component, ChangeDetectionStrategy, ChangeDetectorRef,
+  OnInit, OnDestroy,
+} from '@angular/core';
+import { CommonModule, DecimalPipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { PaperApiService, PaperAccount, EquityPoint } from '../services/paper-api.service';
-import { EquityChartComponent } from '../components/equity-chart.component';
-import { SimulationSummaryCardComponent } from '../components/simulation-summary-card.component';
+import { Subject, takeUntil, catchError, of, forkJoin } from 'rxjs';
+
+import { PaperApiService } from '../services/paper-api.service';
+import { NotificationService } from '../services/notification.service';
+import { PaperAccount, EquityPoint, AccountMetrics } from '../core/models/paper.model';
+
+import {
+  StatCardComponent, StateBadgeComponent, LoadingSkeletonComponent,
+  EmptyStateComponent, TradingChartComponent,
+  StatCardConfig, PricePoint,
+} from '../shared';
 
 @Component({
   selector: 'app-paper-dashboard',
   standalone: true,
-  imports: [CommonModule, EquityChartComponent, SimulationSummaryCardComponent],
-  template: `
-    <div class="page">
-      <div class="flex justify-between items-center mb-2">
-        <h1>Paper Trading Dashboard</h1>
-        <button class="btn-primary" (click)="createAccount()">+ Create Account (₹100,000)</button>
-      </div>
-
-      <div *ngIf="loading" class="loading-container"><div class="spinner"></div> Loading accounts...</div>
-
-      <div *ngIf="!loading && accounts.length === 0" class="card" style="text-align:center; padding: 3rem;">
-        <p class="text-muted">No paper trading accounts yet. Create one to get started.</p>
-      </div>
-
-      <div *ngIf="!loading && accounts.length > 0">
-        <div class="grid-3 mb-2">
-          <div *ngFor="let a of accounts" class="card account-card"
-               [class.account-active]="selectedAccount === a.account_id"
-               (click)="selectAccount(a.account_id)">
-            <div class="flex justify-between items-center">
-              <span class="text-mono text-sm">{{ a.account_id | slice:0:8 }}...</span>
-              <button class="btn-sm btn-primary" (click)="goToDetail(a.account_id); $event.stopPropagation()">Detail &rarr;</button>
-            </div>
-            <div class="grid-2 mt-1">
-              <div>
-                <div class="stat-label">Cash</div>
-                <div class="stat-value" style="font-size:1.1rem">₹{{ a.cash | number:'1.0-0' }}</div>
-              </div>
-              <div>
-                <div class="stat-label">Equity</div>
-                <div class="stat-value" style="font-size:1.1rem">₹{{ a.equity | number:'1.0-0' }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div *ngIf="selectedAccount">
-          <app-simulation-summary-card [accountId]="selectedAccount" />
-          <div class="card mt-2">
-            <app-equity-chart [data]="equityData" />
-          </div>
-        </div>
-      </div>
-    </div>
-  `,
-  styles: [`
-    .account-card {
-      cursor: pointer;
-      transition: all var(--transition);
-      border: 2px solid transparent;
-    }
-    .account-card:hover { border-color: var(--color-primary-light); }
-    .account-active { border-color: var(--color-primary) !important; background: var(--color-primary-light); }
-  `]
+  imports: [
+    CommonModule, FormsModule, DecimalPipe,
+    StatCardComponent, StateBadgeComponent, LoadingSkeletonComponent,
+    EmptyStateComponent, TradingChartComponent,
+  ],
+  templateUrl: './paper-dashboard.component.html',
+  styleUrl: './paper-dashboard.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PaperDashboardComponent implements OnInit {
+export class PaperDashboardComponent implements OnInit, OnDestroy {
   accounts: PaperAccount[] = [];
-  selectedAccount: string | null = null;
-  equityData: EquityPoint[] = [];
+  selectedId: string | null = null;
   loading = true;
+  creating = false;
 
-  constructor(private paperApi: PaperApiService, private router: Router) {}
+  // Selected account detail
+  metrics: AccountMetrics | null = null;
+  equityData: EquityPoint[] = [];
+  equityCurve: PricePoint[] = [];
+  metricsLoading = false;
+
+  // Paper order form
+  orderTicker = '';
+  orderSide: 'buy' | 'sell' = 'buy';
+  orderQty = 1;
+  orderType: 'market' | 'limit' = 'market';
+  orderLimitPrice: number | null = null;
+  submittingOrder = false;
+
+  private destroy$ = new Subject<void>();
+
+  constructor(
+    private cdr: ChangeDetectorRef,
+    private paperApi: PaperApiService,
+    private notify: NotificationService,
+    private router: Router,
+  ) {}
 
   ngOnInit(): void {
-    this.paperApi.listAccounts().subscribe({
-      next: data => { this.accounts = data; this.loading = false; },
-      error: () => { this.loading = false; }
-    });
+    this.loadAccounts();
   }
 
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  // ── Computed ──
+  get selectedAccount(): PaperAccount | undefined {
+    return this.accounts.find(a => a.account_id === this.selectedId);
+  }
+
+  get perfCards(): StatCardConfig[] {
+    if (!this.metrics) return [];
+    return [
+      { label: 'Net P&L', value: `₹${(this.metrics.net_pnl ?? 0).toLocaleString('en-IN')}`, icon: 'graph-up-arrow', trend: (this.metrics.net_pnl ?? 0) >= 0 ? 'up' : 'down' },
+      { label: 'Win Rate', value: this.metrics.win_rate != null ? `${(this.metrics.win_rate * 100).toFixed(1)}%` : 'N/A', icon: 'bullseye' },
+      { label: 'Total Trades', value: this.metrics.total_trades ?? 0, icon: 'arrow-left-right' },
+      { label: 'Sharpe', value: this.metrics.sharpe != null ? this.metrics.sharpe.toFixed(2) : 'N/A', icon: 'bar-chart-line' },
+      { label: 'Max Drawdown', value: this.metrics.max_drawdown != null ? `${(this.metrics.max_drawdown * 100).toFixed(1)}%` : 'N/A', icon: 'graph-down-arrow', trend: 'down' },
+      { label: 'Sortino', value: this.metrics.sortino != null ? this.metrics.sortino.toFixed(2) : 'N/A', icon: 'bar-chart-steps' },
+    ];
+  }
+
+  // ── Actions ──
   createAccount(): void {
-    this.paperApi.createAccount().subscribe(acc => {
-      this.accounts = [...this.accounts, acc];
+    this.creating = true;
+    this.cdr.markForCheck();
+    this.paperApi.createAccount().pipe(
+      catchError(() => { this.notify.error('Failed to create account.'); return of(null); }),
+      takeUntil(this.destroy$),
+    ).subscribe(acc => {
+      this.creating = false;
+      if (acc) {
+        this.accounts = [...this.accounts, acc];
+        this.notify.success('Paper account created.');
+        this.selectAccount(acc.account_id);
+      }
+      this.cdr.markForCheck();
     });
   }
 
   selectAccount(id: string): void {
-    this.selectedAccount = id;
-    this.paperApi.getEquity(id).subscribe({
-      next: data => this.equityData = data,
-      error: () => {}
+    this.selectedId = id;
+    this.metricsLoading = true;
+    this.metrics = null;
+    this.equityCurve = [];
+    this.cdr.markForCheck();
+
+    forkJoin({
+      metrics: this.paperApi.getMetrics(id).pipe(catchError(() => of(null))),
+      equity: this.paperApi.getEquity(id).pipe(catchError(() => of([]))),
+    }).pipe(takeUntil(this.destroy$)).subscribe(({ metrics, equity }) => {
+      this.metrics = metrics;
+      this.equityData = equity;
+      this.equityCurve = equity.map(e => ({ time: e.date, value: e.equity }));
+      this.metricsLoading = false;
+      this.cdr.markForCheck();
+    });
+  }
+
+  submitOrder(): void {
+    if (!this.selectedId || !this.orderTicker.trim()) return;
+    this.submittingOrder = true;
+    this.cdr.markForCheck();
+
+    const intent: Record<string, unknown> = {
+      ticker: this.orderTicker.trim().toUpperCase(),
+      side: this.orderSide,
+      quantity: this.orderQty,
+      order_type: this.orderType,
+    };
+    if (this.orderType === 'limit' && this.orderLimitPrice) {
+      intent['limit_price'] = this.orderLimitPrice;
+    }
+
+    this.paperApi.submitOrderIntent(this.selectedId, intent).pipe(
+      catchError(() => { this.notify.error('Order failed.'); return of(null); }),
+      takeUntil(this.destroy$),
+    ).subscribe(res => {
+      this.submittingOrder = false;
+      if (res) this.notify.success('Paper order submitted.');
+      this.cdr.markForCheck();
     });
   }
 
   goToDetail(id: string): void {
     this.router.navigate(['/account', id]);
+  }
+
+  // ── Private ──
+  private loadAccounts(): void {
+    this.paperApi.listAccounts().pipe(
+      catchError(() => of([])),
+      takeUntil(this.destroy$),
+    ).subscribe(data => {
+      this.accounts = data;
+      this.loading = false;
+      this.cdr.markForCheck();
+    });
   }
 }

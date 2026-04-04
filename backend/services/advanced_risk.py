@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -34,7 +35,7 @@ SECTOR_MAP: dict[str, str] = {
     "BPCL": "Oil & Gas",
     "SUNPHARMA": "Pharma", "DRREDDY": "Pharma", "CIPLA": "Pharma",
     "DIVISLAB": "Pharma",
-    "MARUTI": "Auto", "TATAMOTORS": "Auto", "M&M": "Auto",
+    "MARUTI": "Auto", "M&M": "Auto",
     "BAJAJ-AUTO": "Auto", "HEROMOTOCO": "Auto",
     "TATASTEEL": "Metals", "HINDALCO": "Metals", "JSWSTEEL": "Metals",
     "ITC": "FMCG", "HINDUNILVR": "FMCG", "NESTLEIND": "FMCG",
@@ -499,11 +500,14 @@ class AdvancedRiskEngine:
 
 
 _risk_engine: AdvancedRiskEngine | None = None
+_risk_engine_lock = threading.Lock()
 
 
 def get_risk_engine(capital: float = 100_000) -> AdvancedRiskEngine:
     """Module-level singleton accessor."""
     global _risk_engine
     if _risk_engine is None:
-        _risk_engine = AdvancedRiskEngine(capital=capital)
+        with _risk_engine_lock:
+            if _risk_engine is None:
+                _risk_engine = AdvancedRiskEngine(capital=capital)
     return _risk_engine

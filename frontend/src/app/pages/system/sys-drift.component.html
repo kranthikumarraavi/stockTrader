@@ -1,0 +1,54 @@
+<!-- System > Drift & Health -->
+@if (loading) {
+  <app-loading-skeleton shape="card" />
+  <app-loading-skeleton shape="card" />
+}
+
+@if (!loading && drift) {
+  <!-- Status row -->
+  <div class="sd__grid">
+    <div class="card sd__badge-card">
+      <span class="text-muted" style="font-size:0.75rem;font-weight:600">Overall Status</span>
+      <app-state-badge [label]="drift.status" [variant]="overallBadge" />
+    </div>
+    <app-stat-card label="PSI Drift"
+      [value]="drift.prediction_drift_psi !== null ? (drift.prediction_drift_psi | number:'1.4-4') ?? 'N/A' : 'N/A'"
+      icon="bar-chart-line"
+      [trend]="drift.prediction_drift_psi !== null && drift.prediction_drift_psi > 0.2 ? 'down' : 'flat'" />
+    <div class="card sd__badge-card">
+      <span class="text-muted" style="font-size:0.75rem;font-weight:600">Feature Drift</span>
+      <app-state-badge [label]="drift.feature_drift_detected ? 'DETECTED' : 'None'" [variant]="featureBadge" />
+    </div>
+  </div>
+
+  <!-- Latency / health row -->
+  <div class="sd__grid">
+    <app-stat-card label="Avg Latency"
+      [value]="drift.avg_latency_ms !== null ? (drift.avg_latency_ms | number:'1.1-1') + ' ms' : 'N/A'"
+      icon="speedometer2" />
+    <app-stat-card label="P99 Latency"
+      [value]="drift.p99_latency_ms !== null ? (drift.p99_latency_ms | number:'1.1-1') + ' ms' : 'N/A'"
+      icon="speedometer" />
+    <app-stat-card label="Error Rate"
+      [value]="drift.error_rate !== null ? (drift.error_rate * 100 | number:'1.2-2') + '%' : 'N/A'"
+      icon="exclamation-triangle"
+      [trend]="drift.error_rate !== null && drift.error_rate > 0.05 ? 'down' : 'flat'" />
+  </div>
+
+  <button class="btn btn-primary btn-sm" (click)="runCheck()"
+          [disabled]="checking || !auth.isAuthenticated">
+    @if (checking) { <span class="spinner-border spinner-border-sm"></span> }
+    Run Drift Check
+  </button>
+}
+
+@if (!loading && !drift) {
+  <app-empty-state icon="activity"
+    heading="No drift data"
+    message="Run the first drift check to populate health metrics." />
+  <button class="btn btn-primary btn-sm mt-2" (click)="runCheck()"
+          [disabled]="checking || !auth.isAuthenticated">
+    @if (checking) { <span class="spinner-border spinner-border-sm"></span> }
+    Run First Check
+  </button>
+}
