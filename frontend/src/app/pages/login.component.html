@@ -1,0 +1,59 @@
+<!-- Auth Login — Phase 5.1 -->
+<div class="auth">
+  <div class="auth__card">
+
+    <!-- Branding -->
+    <div class="auth__brand">
+      <i class="bi bi-graph-up-arrow auth__logo"></i>
+      <h1 class="auth__title">StockTrader</h1>
+      <p class="auth__tagline text-muted">Intelligent Trading Platform</p>
+    </div>
+
+    <hr class="auth__divider" />
+
+    <!-- Login Form -->
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+      <div class="auth__field">
+        <label class="form-label" for="token">API Token</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
+          <input
+            [type]="showPassword ? 'text' : 'password'"
+            class="form-control"
+            id="token"
+            formControlName="token"
+            placeholder="Enter your bearer token"
+            autocomplete="off"
+            [class.is-invalid]="tokenCtrl.touched && tokenCtrl.invalid" />
+          <button type="button" class="btn btn-outline-secondary"
+                  (click)="showPassword = !showPassword" tabindex="-1">
+            <i class="bi" [ngClass]="showPassword ? 'bi-eye-slash' : 'bi-eye'"></i>
+          </button>
+        </div>
+        @if (tokenCtrl.touched && tokenCtrl.hasError('required')) {
+          <div class="invalid-feedback d-block">Token is required.</div>
+        }
+        @if (tokenCtrl.touched && tokenCtrl.hasError('minlength')) {
+          <div class="invalid-feedback d-block">Token must be at least 8 characters.</div>
+        }
+      </div>
+
+      @if (error) {
+        <div class="alert alert-danger mt-2 mb-0 py-2 d-flex align-items-center gap-2">
+          <i class="bi bi-exclamation-triangle-fill"></i> {{ error }}
+        </div>
+      }
+
+      <button type="submit" class="btn btn-primary w-100 auth__submit"
+              [disabled]="loading">
+        @if (loading) { <span class="spinner-border spinner-border-sm"></span> }
+        @else { <i class="bi bi-box-arrow-in-right"></i> }
+        Sign In
+      </button>
+    </form>
+
+    <p class="auth__hint text-muted">
+      Use your API bearer token from the backend service to authenticate.
+    </p>
+  </div>
+</div>

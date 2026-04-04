@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -197,7 +197,7 @@ def write_provenance_log(
     record = {
         "ticker": ticker,
         "source": source,
-        "download_timestamp": datetime.utcnow().isoformat(),
+        "download_timestamp": datetime.now(timezone.utc).isoformat(),
         "start_date": start,
         "end_date": end,
         "row_count": row_count,

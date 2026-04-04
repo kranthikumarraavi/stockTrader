@@ -1,0 +1,195 @@
+<!-- Backtest — Phase 4.2 -->
+<div class="bt">
+
+  <!-- ── Header ── -->
+  <header class="bt__header">
+    <div>
+      <h1 class="bt__title"><i class="bi bi-clock-history"></i> Backtesting</h1>
+      <p class="bt__subtitle text-muted">Historical strategy simulation and analysis</p>
+    </div>
+  </header>
+
+  <!-- ── Parameter Form ── -->
+  <section class="card bt__form">
+    <h2 class="bt__section-title"><i class="bi bi-sliders"></i> Configuration</h2>
+
+    <div class="bt__field">
+      <label class="form-label">Tickers (comma-separated)</label>
+      <input class="form-control form-control-sm" [(ngModel)]="tickersInput"
+             placeholder="RELIANCE, TCS, INFY" />
+    </div>
+
+    <div class="bt__form-row">
+      <div class="bt__field">
+        <label class="form-label">Strategy</label>
+        <select class="form-select form-select-sm" [(ngModel)]="strategy">
+          <option value="momentum">Momentum</option>
+          <option value="mean_reversion">Mean Reversion</option>
+          <option value="ml_signal">ML Signal</option>
+        </select>
+      </div>
+      <div class="bt__field">
+        <label class="form-label">Initial Capital (₹)</label>
+        <input type="number" class="form-control form-control-sm"
+               [(ngModel)]="initialCapital" min="1000" step="10000" />
+      </div>
+    </div>
+
+    <div class="bt__form-row">
+      <div class="bt__field">
+        <label class="form-label">Start Date</label>
+        <input type="date" class="form-control form-control-sm" [(ngModel)]="startDate" />
+      </div>
+      <div class="bt__field">
+        <label class="form-label">End Date</label>
+        <input type="date" class="form-control form-control-sm" [(ngModel)]="endDate" />
+      </div>
+    </div>
+
+    <div class="bt__form-actions">
+      <button class="btn btn-primary" (click)="submitBacktest()"
+              [disabled]="submitting || !isFormValid">
+        @if (submitting) { <span class="spinner-border spinner-border-sm"></span> }
+        @else { <i class="bi bi-play-fill"></i> }
+        Run Backtest
+      </button>
+    </div>
+  </section>
+
+  <!-- ── Error State ── -->
+  @if (error && !results && !jobId) {
+    <div class="alert alert-danger d-flex align-items-center gap-2">
+      <i class="bi bi-exclamation-triangle-fill"></i> {{ error }}
+    </div>
+  }
+
+  <!-- ── Pending Job ── -->
+  @if (jobId && !results) {
+    <section class="card bt__pending">
+      <div class="bt__pending-row">
+        <div class="d-flex align-items-center gap-2">
+          <span class="spinner-border spinner-border-sm text-primary"></span>
+          <div>
+            <strong>Job ID:</strong>
+            <span class="font-monospace">{{ jobId }}</span>
+          </div>
+        </div>
+        <app-state-badge [label]="jobStatus" [variant]="statusBadge(jobStatus)" />
+      </div>
+      <button class="btn btn-sm btn-outline-primary mt-2" (click)="pollResults()" [disabled]="polling">
+        @if (polling) { <span class="spinner-border spinner-border-sm"></span> }
+        Check Results
+      </button>
+    </section>
+  }
+
+  <!-- ── Results ── -->
+  @if (results) {
+    <div class="bt__results">
+      <h2 class="bt__section-title">
+        <i class="bi bi-bar-chart-line-fill"></i>
+        Results — {{ results.tickers.join(', ') }}
+      </h2>
+
+      <!-- Summary Cards -->
+      <div class="bt__card-grid">
+        @for (card of resultCards; track card.label) {
+          <app-stat-card [label]="card.label" [value]="card.value"
+                         [icon]="card.icon" [trend]="card.trend ?? 'flat'" />
+        }
+      </div>
+
+      <!-- Equity Curve -->
+      @if (equityCurve.length > 1) {
+        <section class="card bt__equity">
+          <h3 class="bt__section-title"><i class="bi bi-graph-up"></i> Equity Curve</h3>
+          <div class="bt__chart-wrap">
+            <app-trading-chart [lineData]="equityCurve" mode="line" />
+          </div>
+        </section>
+      }
+
+      <!-- Trade Statistics -->
+      @if (tradeStats.length) {
+        <section class="card bt__stats">
+          <h3 class="bt__section-title"><i class="bi bi-calculator"></i> Trade Statistics</h3>
+          <div class="bt__stats-grid">
+            @for (s of tradeStats; track s.label) {
+              <div class="bt__stat-item">
+                <span class="text-muted">{{ s.label }}</span>
+                <strong>{{ s.value }}</strong>
+              </div>
+            }
+          </div>
+        </section>
+      }
+
+      <!-- Trade Log -->
+      <section class="card bt__trades">
+        <h3 class="bt__section-title"><i class="bi bi-journal-text"></i> Trade Log</h3>
+
+        @if (results.trades.length === 0) {
+          <app-empty-state icon="clock-history"
+            heading="No trades" message="No trades executed during this period." />
+        }
+
+        @if (results.trades.length > 0) {
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Date</th><th>Ticker</th><th>Side</th>
+                  <th class="text-end">Qty</th><th class="text-end">Price</th>
+                  <th class="text-end">P&L</th><th class="text-end">Charges</th>
+                  <th>Exit Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (t of displayedTrades; track $index) {
+                  <tr>
+                    <td class="font-monospace">{{ t.date }}</td>
+                    <td><strong>{{ t.ticker }}</strong></td>
+                    <td><app-state-badge [label]="t.side" [variant]="sideBadge(t.side)" /></td>
+                    <td class="text-end">{{ t.quantity }}</td>
+                    <td class="text-end font-monospace">₹{{ t.price | number:'1.2-2' }}</td>
+                    <td class="text-end font-monospace"
+                        [class]="t.pnl >= 0 ? 'text-success' : 'text-danger'">
+                      {{ t.pnl >= 0 ? '+' : '' }}₹{{ t.pnl | number:'1.2-2' }}
+                    </td>
+                    <td class="text-end font-monospace">₹{{ (t.charges ?? 0) | number:'1.2-2' }}</td>
+                    <td class="text-muted">{{ t.exit_reason ?? '' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          @if (totalPages > 1) {
+            <div class="bt__pagination">
+              <span class="text-muted" style="font-size:0.8125rem">
+                {{ tradesStart + 1 }}–{{ tradesEnd }} of {{ results.trades.length }}
+              </span>
+              <div class="d-flex gap-1">
+                <button class="btn btn-sm btn-outline-secondary" (click)="prevPage()"
+                        [disabled]="currentPage === 0">
+                  <i class="bi bi-chevron-left"></i> Prev
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" (click)="nextPage()"
+                        [disabled]="tradesEnd >= results.trades.length">
+                  Next <i class="bi bi-chevron-right"></i>
+                </button>
+              </div>
+            </div>
+          }
+        }
+      </section>
+    </div>
+  }
+
+  <!-- ── Initial Empty State ── -->
+  @if (!results && !jobId && !submitting && !error) {
+    <app-empty-state icon="clock-history"
+      heading="No backtest results"
+      message="Configure parameters above and click Run to start a historical simulation." />
+  }
+</div>

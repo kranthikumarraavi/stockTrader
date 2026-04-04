@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import random
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -366,11 +367,14 @@ class ExecutionQualityEngine:
 
 
 _execution_engine: ExecutionQualityEngine | None = None
+_execution_engine_lock = threading.Lock()
 
 
 def get_execution_engine() -> ExecutionQualityEngine:
     """Module-level singleton accessor."""
     global _execution_engine
     if _execution_engine is None:
-        _execution_engine = ExecutionQualityEngine()
+        with _execution_engine_lock:
+            if _execution_engine is None:
+                _execution_engine = ExecutionQualityEngine()
     return _execution_engine

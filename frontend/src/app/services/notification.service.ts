@@ -1,12 +1,7 @@
 // Notification service
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
-
-export interface Toast {
-  id: number;
-  message: string;
-  type: 'success' | 'error' | 'info' | 'warning';
-}
+import { Toast, ToastType } from '../core/models';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationService {
@@ -19,7 +14,7 @@ export class NotificationService {
   info(message: string): void { this.add(message, 'info'); }
   warning(message: string): void { this.add(message, 'warning'); }
 
-  private add(message: string, type: Toast['type']): void {
+  private add(message: string, type: ToastType): void {
     const toast: Toast = { id: ++this.counter, message, type };
     this.toastsSubject.next([...this.toastsSubject.value, toast]);
     setTimeout(() => this.remove(toast.id), 4000);

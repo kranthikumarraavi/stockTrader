@@ -2,30 +2,36 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { retry } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
+import {
+  ExecutionStats, ExecutionReport, OrderTypeDecision,
+  PriceCheckResult, LiquidityCheckResult,
+} from '../core/models';
 
 @Injectable({ providedIn: 'root' })
 export class ExecutionApiService {
-  private readonly base = '/api/v1';
+  private readonly base = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 
-  getStats(): Observable<any> {
-    return this.http.get(`${this.base}/execution/stats`);
+  getStats(): Observable<ExecutionStats> {
+    return this.http.get<ExecutionStats>(`${this.base}/execution/stats`).pipe(retry({ count: 2, delay: 1000 }));
   }
 
-  getRecentReports(limit = 20): Observable<any[]> {
-    return this.http.get<any[]>(`${this.base}/execution/reports`, { params: { limit } });
+  getRecentReports(limit = 20): Observable<ExecutionReport[]> {
+    return this.http.get<ExecutionReport[]>(`${this.base}/execution/reports`, { params: { limit } });
   }
 
-  decideOrderType(payload: any): Observable<{ order_type: string }> {
-    return this.http.post<{ order_type: string }>(`${this.base}/execution/decide-order-type`, payload);
+  decideOrderType(payload: Record<string, unknown>): Observable<OrderTypeDecision> {
+    return this.http.post<OrderTypeDecision>(`${this.base}/execution/decide-order-type`, payload);
   }
 
-  priceCheck(payload: any): Observable<{ ok: boolean; message: string }> {
-    return this.http.post<{ ok: boolean; message: string }>(`${this.base}/execution/price-check`, payload);
+  priceCheck(payload: Record<string, unknown>): Observable<PriceCheckResult> {
+    return this.http.post<PriceCheckResult>(`${this.base}/execution/price-check`, payload);
   }
 
-  liquidityCheck(payload: any): Observable<{ ok: boolean; warnings: string[] }> {
-    return this.http.post<{ ok: boolean; warnings: string[] }>(`${this.base}/execution/liquidity-check`, payload);
+  liquidityCheck(payload: Record<string, unknown>): Observable<LiquidityCheckResult> {
+    return this.http.post<LiquidityCheckResult>(`${this.base}/execution/liquidity-check`, payload);
   }
 }

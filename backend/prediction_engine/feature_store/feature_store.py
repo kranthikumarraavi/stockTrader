@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from backend.prediction_engine.feature_store import transforms as T
+
+_DEFAULT_RAW_DIR = Path(__file__).resolve().parents[3] / "storage" / "raw"
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +158,10 @@ def build_features(
     tickers: list[str],
     start: str | datetime | None = None,
     end: str | datetime | None = None,
-    data_dir: str | Path = "storage/raw",
+    data_dir: str | Path | None = None,
 ) -> pd.DataFrame:
     """Build the full feature matrix for a list of tickers."""
-    data_dir = Path(data_dir)
+    data_dir = Path(data_dir) if data_dir else _DEFAULT_RAW_DIR
     frames: list[pd.DataFrame] = []
 
     for ticker in tickers:
@@ -187,10 +189,10 @@ def build_features(
 def get_features_for_inference(
     ticker: str,
     timestamp: str | datetime | None = None,
-    data_dir: str | Path = "storage/raw",
+    data_dir: str | Path | None = None,
 ) -> dict:
     """Return the latest feature vector for a single ticker."""
-    data_dir = Path(data_dir)
+    data_dir = Path(data_dir) if data_dir else _DEFAULT_RAW_DIR
     df = _load_ticker_csv(ticker, data_dir)
     feat = _compute_features(df, ticker).dropna().reset_index(drop=True)
 
@@ -210,7 +212,7 @@ def get_features_for_inference(
 def _write_manifest(tickers: list[str], df: pd.DataFrame) -> None:
     manifest = {
         "version": "1.0",
-        "created_at": datetime.utcnow().isoformat() + "Z",
+        "created_at": datetime.now(timezone.utc).isoformat() + "Z",
         "tickers": tickers,
         "feature_columns": FEATURE_COLUMNS,
         "row_count": len(df),
@@ -251,10 +253,10 @@ def build_option_features(
     expiry: str,
     start: str | datetime | None = None,
     end: str | datetime | None = None,
-    data_dir: str | Path = "storage/raw",
+    data_dir: str | Path | None = None,
 ) -> pd.DataFrame:
     """Build option-specific feature matrix."""
-    data_dir = Path(data_dir)
+    data_dir = Path(data_dir) if data_dir else _DEFAULT_RAW_DIR
     df = _load_ticker_csv(underlying, data_dir)
     equity_feat = _compute_features(df, underlying).dropna().reset_index(drop=True)
 

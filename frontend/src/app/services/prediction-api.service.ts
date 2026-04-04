@@ -2,7 +2,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { map, retry } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 import { PredictionResult, Greeks, OptionSignal } from '../core/models';
 
 export { PredictionResult, Greeks, OptionSignal };
@@ -19,7 +20,7 @@ interface PredictEnvelope {
 
 @Injectable({ providedIn: 'root' })
 export class PredictionApiService {
-  private readonly base = '/api/v1';
+  private readonly base = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 

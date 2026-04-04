@@ -1,0 +1,24 @@
+<!-- System Admin Shell — Phase 5.2 -->
+<div class="sys">
+  <header class="sys__header">
+    <h1 class="sys__title"><i class="bi bi-gear-wide-connected"></i> System Admin</h1>
+    <nav class="sys__tabs">
+      <a class="sys__tab" routerLink="models" routerLinkActive="sys__tab--active">
+        <i class="bi bi-cpu"></i> Models
+      </a>
+      <a class="sys__tab" routerLink="drift" routerLinkActive="sys__tab--active">
+        <i class="bi bi-activity"></i> Drift & Health
+      </a>
+      <a class="sys__tab" routerLink="registry" routerLinkActive="sys__tab--active">
+        <i class="bi bi-archive"></i> Registry
+      </a>
+      <a class="sys__tab" routerLink="canary" routerLinkActive="sys__tab--active">
+        <i class="bi bi-flag"></i> Canary
+      </a>
+    </nav>
+  </header>
+
+  <div class="sys__content">
+    <router-outlet />
+  </div>
+</div>

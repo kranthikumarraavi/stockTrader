@@ -1,4 +1,13 @@
 <div class="pf">
+  <!-- ── Error Banner ── -->
+  @if (loadError) {
+    <div class="alert alert-danger d-flex align-items-center gap-2 mb-3" role="alert">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      <span>Failed to load portfolio data.</span>
+      <button class="btn btn-sm btn-outline-danger ms-auto" (click)="refresh()">Retry</button>
+    </div>
+  }
+
   <!-- ── Header ── -->
   <div class="pf__header">
     <div class="pf__header-left">

@@ -1,0 +1,146 @@
+<!-- Paper Trading — Phase 4.3 -->
+<div class="pp">
+
+  <!-- ── Header ── -->
+  <header class="pp__header">
+    <div>
+      <h1 class="pp__title"><i class="bi bi-journal-text"></i> Paper Trading</h1>
+      <p class="pp__subtitle text-muted">Simulated trading environment — no real capital at risk</p>
+    </div>
+    <button class="btn btn-primary btn-sm" (click)="createAccount()" [disabled]="creating">
+      @if (creating) { <span class="spinner-border spinner-border-sm"></span> }
+      @else { <i class="bi bi-plus-lg"></i> }
+      New Account (₹100k)
+    </button>
+  </header>
+
+  <!-- ── Loading ── -->
+  @if (loading) {
+    <app-loading-skeleton shape="card" />
+    <app-loading-skeleton shape="card" />
+  }
+
+  <!-- ── Empty ── -->
+  @if (!loading && accounts.length === 0) {
+    <app-empty-state icon="journal-text"
+      heading="No paper accounts"
+      message="Create a simulated trading account to start practising strategies." />
+  }
+
+  @if (!loading && accounts.length > 0) {
+    <div class="pp__grid">
+
+      <!-- ── Left: Account List ── -->
+      <aside class="pp__accounts">
+        <h2 class="pp__section-title"><i class="bi bi-person-lines-fill"></i> Accounts</h2>
+        @for (a of accounts; track a.account_id) {
+          <div class="pp__account-card"
+               [class.pp__account-card--active]="selectedId === a.account_id"
+               (click)="selectAccount(a.account_id)">
+            <div class="pp__account-head">
+              <span class="font-monospace" style="font-size:0.75rem">{{ a.account_id | slice:0:8 }}…</span>
+              <button class="btn btn-sm btn-outline-primary"
+                      (click)="goToDetail(a.account_id); $event.stopPropagation()">
+                Detail <i class="bi bi-arrow-right"></i>
+              </button>
+            </div>
+            <div class="pp__account-vals">
+              <div>
+                <span class="text-muted" style="font-size:0.75rem">Cash</span>
+                <strong>₹{{ a.cash | number:'1.0-0' }}</strong>
+              </div>
+              <div>
+                <span class="text-muted" style="font-size:0.75rem">Equity</span>
+                <strong>₹{{ a.equity | number:'1.0-0' }}</strong>
+              </div>
+            </div>
+          </div>
+        }
+      </aside>
+
+      <!-- ── Right: Detail Panel ── -->
+      <div class="pp__detail">
+        @if (!selectedId) {
+          <app-empty-state icon="hand-index"
+            heading="Select an account"
+            message="Click an account on the left to view its performance details." />
+        }
+
+        @if (selectedId) {
+          <!-- Performance Cards -->
+          @if (metricsLoading) {
+            <app-loading-skeleton shape="card" />
+          }
+
+          @if (!metricsLoading && perfCards.length) {
+            <div class="pp__perf-grid">
+              @for (c of perfCards; track c.label) {
+                <app-stat-card [label]="c.label" [value]="c.value"
+                               [icon]="c.icon" [trend]="c.trend ?? 'flat'" />
+              }
+            </div>
+          }
+
+          <!-- Equity Curve -->
+          @if (equityCurve.length > 1) {
+            <section class="card pp__section">
+              <h3 class="pp__section-title"><i class="bi bi-graph-up"></i> Equity Curve</h3>
+              <div class="pp__chart-wrap">
+                <app-trading-chart [lineData]="equityCurve" mode="line" />
+              </div>
+            </section>
+          }
+
+          @if (!metricsLoading && !metrics) {
+            <app-empty-state icon="bar-chart"
+              heading="No metrics"
+              message="No performance data yet for this account." />
+          }
+
+          <!-- Quick Paper Order -->
+          <section class="card pp__section pp__order">
+            <h3 class="pp__section-title"><i class="bi bi-lightning-fill"></i> Quick Paper Order</h3>
+            <div class="pp__order-row">
+              <div class="pp__field">
+                <label class="form-label">Ticker</label>
+                <input class="form-control form-control-sm" [(ngModel)]="orderTicker"
+                       placeholder="RELIANCE" />
+              </div>
+              <div class="pp__field">
+                <label class="form-label">Side</label>
+                <select class="form-select form-select-sm" [(ngModel)]="orderSide">
+                  <option value="buy">Buy</option>
+                  <option value="sell">Sell</option>
+                </select>
+              </div>
+              <div class="pp__field">
+                <label class="form-label">Qty</label>
+                <input type="number" class="form-control form-control-sm"
+                       [(ngModel)]="orderQty" min="1" />
+              </div>
+              <div class="pp__field">
+                <label class="form-label">Type</label>
+                <select class="form-select form-select-sm" [(ngModel)]="orderType">
+                  <option value="market">Market</option>
+                  <option value="limit">Limit</option>
+                </select>
+              </div>
+              @if (orderType === 'limit') {
+                <div class="pp__field">
+                  <label class="form-label">Limit ₹</label>
+                  <input type="number" class="form-control form-control-sm"
+                         [(ngModel)]="orderLimitPrice" min="0" step="0.05" />
+                </div>
+              }
+            </div>
+            <button class="btn btn-sm btn-primary mt-2" (click)="submitOrder()"
+                    [disabled]="submittingOrder || !orderTicker.trim()">
+              @if (submittingOrder) { <span class="spinner-border spinner-border-sm"></span> }
+              Submit Paper Order
+            </button>
+          </section>
+        }
+      </div>
+    </div>
+  }
+</div>

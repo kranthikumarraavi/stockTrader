@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["risk"])
 
@@ -130,4 +134,5 @@ async def risk_snapshots(limit: int = 20):
         finally:
             db.close()
     except Exception as exc:
-        return {"error": str(exc)}
+        logger.exception("Risk endpoint error")
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -255,6 +255,16 @@ def train(
     X_test = test_df[NUMERIC_FEATURES]
     y_test = test_df["label"]
 
+    # --- Leakage prevention checks ---
+    try:
+        from backend.shared.leakage import run_all_checks
+        run_all_checks(train_df, val_df, label_col="label", date_col="date", horizon=horizon)
+        run_all_checks(val_df, test_df, label_col="label", date_col="date", horizon=horizon)
+        logger.info("Leakage checks passed for train/val/test splits.")
+    except Exception as exc:
+        logger.error("Leakage check failed: %s", exc)
+        raise
+
     # Compute class weights to handle imbalanced labels
     sample_weights = _compute_class_weights(y_train)
 
@@ -305,7 +315,7 @@ def train(
     # Update registry
     entry = {
         "version": version,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "seed": seed,
         "horizon": horizon,
         "metrics": metrics,
@@ -475,7 +485,7 @@ def train_hybrid(
     logger.info("[hybrid] LightGBM on combined features: accuracy=%.4f (thresh=%.2f)", lgb_acc, lgb_thresh)
 
     # Save whichever model is better
-    version = f"hybrid_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    version = f"hybrid_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     artifact_path = ARTIFACTS_DIR / version
     gru.save(artifact_path / "gru")
     xgb_model.save(artifact_path / "xgboost")
@@ -496,7 +506,7 @@ def train_hybrid(
 
     entry = {
         "version": version,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "seed": seed,
         "horizon": horizon,
         "type": "hybrid_gru_xgboost",
@@ -588,7 +598,7 @@ def train_ensemble(
     logger.info("Ensemble test accuracy: %.4f, F1: %.4f", test_accuracy, test_f1)
 
     # Save all artifacts
-    version = f"ensemble_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+    version = f"ensemble_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
     artifact_path = ARTIFACTS_DIR / version
     ensemble.save(artifact_path / "ensemble")
     for name, m in models_trained.items():
@@ -597,7 +607,7 @@ def train_ensemble(
 
     entry = {
         "version": version,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
         "seed": seed,
         "horizon": horizon,
         "type": "ensemble",

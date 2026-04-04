@@ -1,0 +1,37 @@
+@use '../../../variables' as *;
+
+.sm {
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  &__status-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.75rem 1rem;
+  }
+
+  &__actions {
+    padding: 1rem;
+  }
+
+  &__section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    i { color: $secondary; }
+  }
+
+  &__btn-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+}

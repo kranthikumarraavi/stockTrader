@@ -135,7 +135,7 @@ def _get_angel_profile() -> dict[str, Any]:
         logger.exception("Account verification failed")
         return {
             "status": "error",
-            "message": str(exc),
+            "message": "Internal server error",
         }
 
 

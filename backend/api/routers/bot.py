@@ -6,9 +6,13 @@ instead of the old TradingBot class.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+import logging
+
+from fastapi import APIRouter, HTTPException
 
 from backend.services.bot_lifecycle import get_bot_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["trading-bot"])
 
@@ -97,4 +101,5 @@ async def bot_transitions(limit: int = 50):
         finally:
             db.close()
     except Exception as exc:
-        return {"error": str(exc)}
+        logger.exception("Bot endpoint error")
+        raise HTTPException(status_code=500, detail="Internal server error")

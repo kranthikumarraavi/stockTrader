@@ -1,0 +1,127 @@
+@use '../../variables' as *;
+
+.se {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  // ── Header ──
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i { color: $primary; }
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    margin: 0.125rem 0 0;
+  }
+
+  // ── Summary ──
+  &__summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+  }
+
+  // ── Controls ──
+  &__controls {
+    padding: 0.75rem 1rem;
+  }
+
+  &__controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  &__input-group {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+
+    input { max-width: 140px; }
+    select { max-width: 110px; }
+
+    &--batch {
+      flex: 1;
+      min-width: 240px;
+      input { max-width: none; flex: 1; }
+    }
+  }
+
+  &__filter-bar {
+    display: flex;
+    gap: 0.375rem;
+    margin-top: 0.625rem;
+    padding-top: 0.625rem;
+    border-top: 1px solid $border-color;
+  }
+
+  // ── Table ──
+  &__table {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  &__signal-row {
+    td { vertical-align: middle; }
+  }
+
+  &__conf {
+    font-weight: 600;
+
+    &--high { color: $success; }
+    &--mid { color: $warning; }
+    &--low { color: $danger; }
+  }
+
+  &__model {
+    font-size: 0.75rem;
+    color: $secondary;
+  }
+
+  &__shap-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  &__shap-tag {
+    font-size: 0.6875rem;
+    font-weight: 500;
+    padding: 0.125rem 0.375rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .se__summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .se__controls-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .se__input-group {
+    input,
+    select {
+      max-width: none;
+      flex: 1;
+    }
+  }
+}

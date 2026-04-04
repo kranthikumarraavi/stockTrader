@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import random
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.paper_trading.paper_account import PaperAccount
 
@@ -94,7 +94,7 @@ class PaperExecutor:
         fill = PaperFill(
             ticker=ticker, side=side, quantity=quantity,
             fill_price=fill_price, slippage=slippage,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
 
         logger.info("Paper fill: %s %d %s @ %.2f (slippage=%.4f)", side, quantity, ticker, fill_price, slippage)

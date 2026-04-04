@@ -1,5 +1,5 @@
 // Signal detail page component
-import { Component } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PredictionApiService, Greeks, OptionSignal } from '../services/prediction-api.service';
@@ -105,10 +105,10 @@ import { Subscription } from 'rxjs';
     .greek-cell .stat-value { display: block; font-size: 1.1rem; font-weight: 600; font-family: var(--font-mono); }
   `]
 })
-export class SignalDetailComponent {
+export class SignalDetailComponent implements OnDestroy {
   underlying = 'NIFTY';
   strike = 22000;
-  expiry = '2025-02-27';
+  expiry = '';
   optionType: 'CE' | 'PE' = 'CE';
   signal: OptionSignal | null = null;
   error: string | null = null;
@@ -119,7 +119,12 @@ export class SignalDetailComponent {
   constructor(
     private predictionApi: PredictionApiService,
     private priceStream: PriceStreamService
-  ) {}
+  ) {
+    // Default expiry: next Thursday
+    const d = new Date();
+    d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7));
+    this.expiry = d.toISOString().slice(0, 10);
+  }
 
   fetchSignal(): void {
     this.error = null;

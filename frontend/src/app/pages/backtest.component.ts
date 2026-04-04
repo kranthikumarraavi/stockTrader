@@ -1,221 +1,285 @@
-// Backtest page component
-import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {
+  Component, ChangeDetectionStrategy, ChangeDetectorRef,
+  OnDestroy,
+} from '@angular/core';
+import { CommonModule, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BacktestApiService, BacktestRunRequest, BacktestResults, BacktestTrade } from '../services/backtest-api.service';
+import { Subject, takeUntil, catchError, of, timer, switchMap, EMPTY } from 'rxjs';
+
+import { BacktestApiService } from '../services/backtest-api.service';
 import { NotificationService } from '../services/notification.service';
+import {
+  BacktestRunRequest, BacktestResults, BacktestTrade,
+} from '../core/models/backtest.model';
+
+import {
+  StatCardComponent, StateBadgeComponent, LoadingSkeletonComponent,
+  EmptyStateComponent, TradingChartComponent,
+  BadgeVariant, StatCardConfig, PricePoint,
+} from '../shared';
 
 @Component({
   selector: 'app-backtest',
   standalone: true,
-  imports: [CommonModule, FormsModule],
-  template: `
-    <div class="page">
-      <h1>Backtesting</h1>
-
-      <!-- Configuration Form -->
-      <div class="card mb-2">
-        <h2>Run Backtest</h2>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Tickers (comma separated)</label>
-            <input [(ngModel)]="tickersInput" placeholder="RELIANCE, TCS, INFY" />
-          </div>
-          <div class="form-group">
-            <label>Strategy</label>
-            <select [(ngModel)]="strategy">
-              <option value="momentum">Momentum</option>
-              <option value="mean_reversion">Mean Reversion</option>
-              <option value="ml_signal">ML Signal</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Start Date</label>
-            <input type="date" [(ngModel)]="startDate" />
-          </div>
-          <div class="form-group">
-            <label>End Date</label>
-            <input type="date" [(ngModel)]="endDate" />
-          </div>
-          <div class="form-group">
-            <label>Initial Capital (₹)</label>
-            <input type="number" [(ngModel)]="initialCapital" min="1000" />
-          </div>
-        </div>
-        <button class="btn-primary" (click)="submitBacktest()" [disabled]="loading">
-          {{ loading ? 'Submitting...' : 'Run Backtest' }}
-        </button>
-      </div>
-
-      <!-- Pending Job -->
-      <div *ngIf="jobId && !results" class="card mb-2">
-        <div class="flex items-center gap-2">
-          <div class="spinner"></div>
-          <div>
-            <p><strong>Job ID:</strong> <span class="text-mono">{{ jobId }}</span></p>
-            <p class="text-muted text-sm">Status: <span class="badge badge-running">{{ jobStatus }}</span></p>
-          </div>
-        </div>
-        <button class="btn-primary btn-sm mt-2" (click)="pollResults()" [disabled]="polling">
-          {{ polling ? 'Checking...' : 'Check Results' }}
-        </button>
-      </div>
-
-      <!-- Results -->
-      <div *ngIf="results">
-        <h2>Results — {{ results.tickers.join(', ') }}</h2>
-        <div class="grid-4 mb-2">
-          <div class="stat-card">
-            <div class="stat-label">Final Value</div>
-            <div class="stat-value">₹{{ results.final_value | number:'1.0-0' }}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Total Return</div>
-            <div class="stat-value" [class.text-buy]="results.total_return_pct >= 0" [class.text-sell]="results.total_return_pct < 0">
-              {{ results.total_return_pct | number:'1.2-2' }}%
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Sharpe Ratio</div>
-            <div class="stat-value">{{ results.sharpe_ratio !== null ? (results.sharpe_ratio | number:'1.2-2') : 'N/A' }}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">Max Drawdown</div>
-            <div class="stat-value text-sell">{{ results.max_drawdown_pct !== null ? (results.max_drawdown_pct | number:'1.2-2') + '%' : 'N/A' }}</div>
-          </div>
-        </div>
-
-        <div class="card mb-2">
-          <h3>Performance Summary</h3>
-          <div class="grid-3">
-            <div><span class="text-muted text-sm">Period:</span> {{ results.start_date }} → {{ results.end_date }}</div>
-            <div><span class="text-muted text-sm">Initial Capital:</span> ₹{{ results.initial_capital | number:'1.0-0' }}</div>
-            <div><span class="text-muted text-sm">Total Trades:</span> {{ results.trades.length }}</div>
-          </div>
-        </div>
-
-        <!-- Trade Log -->
-        <div class="card">
-          <h3>Trade Log</h3>
-          <table *ngIf="results.trades.length > 0">
-            <thead>
-              <tr>
-                <th>Date</th><th>Ticker</th><th>Side</th><th>Qty</th><th>Price</th><th>P&L</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let t of displayedTrades">
-                <td class="text-mono text-sm">{{ t.date }}</td>
-                <td><strong>{{ t.ticker }}</strong></td>
-                <td><span class="badge" [ngClass]="t.side === 'buy' ? 'badge-buy' : 'badge-sell'">{{ t.side }}</span></td>
-                <td>{{ t.quantity }}</td>
-                <td>₹{{ t.price | number:'1.2-2' }}</td>
-                <td [class.text-buy]="t.pnl >= 0" [class.text-sell]="t.pnl < 0">
-                  {{ t.pnl >= 0 ? '+' : '' }}₹{{ t.pnl | number:'1.2-2' }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div *ngIf="results.trades.length > tradesPerPage" class="flex justify-between items-center mt-2">
-            <span class="text-muted text-sm">Showing {{ tradesStart + 1 }}–{{ tradesEnd }} of {{ results.trades.length }}</span>
-            <div class="flex gap-1">
-              <button class="btn-sm" (click)="prevPage()" [disabled]="currentPage === 0">← Prev</button>
-              <button class="btn-sm" (click)="nextPage()" [disabled]="tradesEnd >= results.trades.length">Next →</button>
-            </div>
-          </div>
-          <p *ngIf="results.trades.length === 0" class="text-muted">No trades executed during this period.</p>
-        </div>
-      </div>
-    </div>
-  `,
-  styles: [`
-    .form-row { margin-bottom: 0; }
-  `]
+  imports: [
+    CommonModule, FormsModule, DecimalPipe,
+    StatCardComponent, StateBadgeComponent, LoadingSkeletonComponent,
+    EmptyStateComponent, TradingChartComponent,
+  ],
+  templateUrl: './backtest.component.html',
+  styleUrl: './backtest.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class BacktestComponent {
+export class BacktestComponent implements OnDestroy {
+  // Form
   tickersInput = 'RELIANCE, TCS';
   strategy = 'momentum';
-  startDate = '2024-01-01';
-  endDate = '2024-12-31';
+  startDate = '2025-06-01';
+  endDate = '2026-03-31';
   initialCapital = 100000;
 
-  loading = false;
+  // State
+  submitting = false;
   jobId: string | null = null;
   jobStatus = 'pending';
   polling = false;
   results: BacktestResults | null = null;
+  error: string | null = null;
 
+  // Pagination
   currentPage = 0;
-  tradesPerPage = 20;
+  readonly tradesPerPage = 20;
+
+  // Equity curve
+  equityCurve: PricePoint[] = [];
+
+  private destroy$ = new Subject<void>();
+  private pollDone$ = new Subject<void>();
 
   constructor(
+    private cdr: ChangeDetectorRef,
     private backtestApi: BacktestApiService,
-    private notify: NotificationService
+    private notify: NotificationService,
   ) {}
 
+  ngOnDestroy(): void {
+    this.pollDone$.next();
+    this.pollDone$.complete();
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  // ── Computed ──
   get tradesStart(): number { return this.currentPage * this.tradesPerPage; }
-  get tradesEnd(): number { return Math.min(this.tradesStart + this.tradesPerPage, this.results?.trades.length ?? 0); }
+  get tradesEnd(): number {
+    return Math.min(this.tradesStart + this.tradesPerPage, this.results?.trades.length ?? 0);
+  }
 
   get displayedTrades(): BacktestTrade[] {
     return this.results?.trades.slice(this.tradesStart, this.tradesEnd) ?? [];
   }
 
+  get totalPages(): number {
+    return Math.ceil((this.results?.trades.length ?? 0) / this.tradesPerPage);
+  }
+
+  get resultCards(): StatCardConfig[] {
+    if (!this.results) return [];
+    const r = this.results;
+    return [
+      {
+        label: 'Final Value',
+        value: `₹${r.final_value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
+        icon: 'cash-stack',
+      },
+      {
+        label: 'Total Return',
+        value: `${r.total_return_pct.toFixed(2)}%`,
+        icon: 'percent',
+        trend: r.total_return_pct >= 0 ? 'up' : 'down',
+      },
+      {
+        label: 'Sharpe Ratio',
+        value: r.sharpe_ratio != null ? r.sharpe_ratio.toFixed(2) : 'N/A',
+        icon: 'bar-chart-line',
+      },
+      {
+        label: 'Sortino Ratio',
+        value: r.sortino_ratio != null ? r.sortino_ratio.toFixed(2) : 'N/A',
+        icon: 'bar-chart-line-fill',
+      },
+      {
+        label: 'Max Drawdown',
+        value: r.max_drawdown_pct != null ? `${r.max_drawdown_pct.toFixed(2)}%` : 'N/A',
+        icon: 'graph-down-arrow',
+        trend: 'down',
+      },
+      {
+        label: 'Win Rate',
+        value: r.win_rate != null ? `${r.win_rate.toFixed(1)}%` : 'N/A',
+        icon: 'trophy',
+        trend: (r.win_rate ?? 0) >= 50 ? 'up' : 'down',
+      },
+      {
+        label: 'Expectancy',
+        value: r.expectancy != null ? `₹${r.expectancy.toFixed(2)}` : 'N/A',
+        icon: 'calculator',
+        trend: (r.expectancy ?? 0) >= 0 ? 'up' : 'down',
+      },
+      {
+        label: 'Total Charges',
+        value: `₹${(r.total_charges ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
+        icon: 'currency-rupee',
+      },
+    ];
+  }
+
+  get tradeStats(): { label: string; value: string }[] {
+    if (!this.results) return [];
+    const r = this.results;
+    const sells = r.trades.filter(t => t.side === 'sell');
+    const wins = sells.filter(t => t.pnl > 0);
+    const losses = sells.filter(t => t.pnl < 0);
+    const totalPnl = sells.reduce((s, t) => s + t.pnl, 0);
+    const avgWin = r.avg_win ?? (wins.length ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0);
+    const avgLoss = r.avg_loss ?? (losses.length ? losses.reduce((s, t) => s + t.pnl, 0) / losses.length : 0);
+    return [
+      { label: 'Round-Trip Trades', value: `${r.total_trades ?? sells.length}` },
+      { label: 'Winning', value: `${wins.length}` },
+      { label: 'Losing', value: `${losses.length}` },
+      { label: 'Win Rate', value: r.win_rate != null ? `${r.win_rate.toFixed(1)}%` : 'N/A' },
+      { label: 'Total P&L', value: `₹${totalPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` },
+      { label: 'Avg Win', value: `₹${avgWin.toFixed(2)}` },
+      { label: 'Avg Loss', value: `₹${avgLoss.toFixed(2)}` },
+      { label: 'Profit Factor', value: losses.length && avgLoss !== 0 ? Math.abs(avgWin / avgLoss).toFixed(2) : 'N/A' },
+      { label: 'Rejections', value: `${r.rejection_count ?? 0}` },
+      { label: 'No-Trade Signals', value: `${r.no_trade_count ?? 0}` },
+    ];
+  }
+
+  sideBadge(side: string): BadgeVariant {
+    return side === 'buy' ? 'buy' : 'sell';
+  }
+
+  statusBadge(status: string): BadgeVariant {
+    switch (status) {
+      case 'completed': return 'success';
+      case 'failed': return 'danger';
+      case 'running': return 'running';
+      default: return 'pending';
+    }
+  }
+
+  get isFormValid(): boolean {
+    const tickers = this.tickersInput.split(',').map(t => t.trim()).filter(t => t);
+    return tickers.length > 0 && !!this.startDate && !!this.endDate && this.initialCapital >= 1000;
+  }
+
+  // ── Actions ──
   submitBacktest(): void {
     const tickers = this.tickersInput.split(',').map(t => t.trim()).filter(t => t);
     if (tickers.length === 0) {
-      this.notify.warning('Please enter at least one ticker.');
+      this.notify.warning('Enter at least one ticker.');
       return;
     }
 
-    this.loading = true;
+    this.submitting = true;
     this.results = null;
     this.jobId = null;
+    this.error = null;
+    this.equityCurve = [];
+    this.cdr.markForCheck();
 
     const request: BacktestRunRequest = {
       tickers,
       start_date: this.startDate,
       end_date: this.endDate,
       initial_capital: this.initialCapital,
-      strategy: this.strategy
+      strategy: this.strategy,
     };
 
-    this.backtestApi.runBacktest(request).subscribe({
-      next: res => {
-        this.jobId = res.job_id;
-        this.jobStatus = res.status;
-        this.loading = false;
-        this.notify.success('Backtest job submitted successfully.');
-        // Auto-poll after a short delay
-        setTimeout(() => this.pollResults(), 2000);
-      },
-      error: () => { this.loading = false; }
+    this.backtestApi.runBacktest(request).pipe(
+      catchError(err => {
+        this.error = err?.error?.detail || 'Failed to submit backtest.';
+        this.submitting = false;
+        this.cdr.markForCheck();
+        return EMPTY;
+      }),
+      takeUntil(this.destroy$),
+    ).subscribe(res => {
+      this.jobId = res.job_id;
+      this.jobStatus = res.status;
+      this.submitting = false;
+      this.notify.success('Backtest submitted.');
+      this.cdr.markForCheck();
+      this.startPolling();
     });
   }
 
   pollResults(): void {
     if (!this.jobId) return;
     this.polling = true;
-    this.backtestApi.getResults(this.jobId).subscribe({
-      next: res => {
-        this.polling = false;
-        if (res.status === 'completed') {
-          this.results = res;
-          this.currentPage = 0;
-          this.notify.success('Backtest completed!');
-        } else if (res.status === 'failed') {
-          this.jobStatus = 'failed';
-          this.notify.error('Backtest job failed.');
-        } else {
-          this.jobStatus = res.status;
-          this.notify.info('Backtest still running. Try again shortly.');
-        }
-      },
-      error: () => { this.polling = false; }
+    this.cdr.markForCheck();
+
+    this.backtestApi.getResults(this.jobId).pipe(
+      catchError(() => { this.polling = false; this.cdr.markForCheck(); return EMPTY; }),
+      takeUntil(this.destroy$),
+    ).subscribe(res => {
+      this.polling = false;
+      this.handleResult(res);
+      this.cdr.markForCheck();
     });
   }
 
   prevPage(): void { if (this.currentPage > 0) this.currentPage--; }
   nextPage(): void { if (this.tradesEnd < (this.results?.trades.length ?? 0)) this.currentPage++; }
+
+  // ── Private ──
+  private startPolling(): void {
+    this.pollDone$ = new Subject<void>();
+    timer(2000, 3000).pipe(
+      switchMap(() => {
+        if (!this.jobId) return EMPTY;
+        this.polling = true;
+        this.cdr.markForCheck();
+        return this.backtestApi.getResults(this.jobId).pipe(catchError(() => EMPTY));
+      }),
+      takeUntil(this.pollDone$),
+      takeUntil(this.destroy$),
+    ).subscribe(res => {
+      this.polling = false;
+      this.handleResult(res);
+      this.cdr.markForCheck();
+    });
+  }
+
+  private handleResult(res: BacktestResults): void {
+    if (res.status === 'completed') {
+      this.results = res;
+      this.currentPage = 0;
+      this.buildEquityCurve(res);
+      this.pollDone$.next();
+      this.notify.success('Backtest completed!');
+    } else if (res.status === 'failed') {
+      this.jobStatus = 'failed';
+      this.error = res.error || 'Backtest job failed.';
+      this.pollDone$.next();
+      this.notify.error(this.error);
+    } else {
+      this.jobStatus = res.status;
+    }
+  }
+
+  private buildEquityCurve(res: BacktestResults): void {
+    if (!res.trades.length) return;
+    let equity = res.initial_capital;
+    // Use a map to keep only the last equity value per date (lightweight-charts needs strictly ascending times)
+    const map = new Map<string, number>();
+    map.set(res.start_date.split(' ')[0], equity);
+    for (const t of res.trades) {
+      equity += t.pnl;
+      map.set(t.date.split(' ')[0], equity);
+    }
+    this.equityCurve = Array.from(map, ([time, value]) => ({ time, value } as PricePoint));
+  }
 }

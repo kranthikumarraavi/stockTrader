@@ -12,15 +12,16 @@ logger = logging.getLogger(__name__)
 
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "")
 
-try:
-    import mlflow
-
-    if MLFLOW_TRACKING_URI:
+_MLFLOW_AVAILABLE = False
+if MLFLOW_TRACKING_URI:
+    try:
+        import mlflow
         mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    _MLFLOW_AVAILABLE = True
-except ImportError:
-    _MLFLOW_AVAILABLE = False
-    logger.info("mlflow not installed â€“ registry will use local JSON fallback")
+        _MLFLOW_AVAILABLE = True
+    except ImportError:
+        logger.info("mlflow not installed — registry will use local JSON fallback")
+else:
+    logger.info("MLFLOW_TRACKING_URI not set — using local JSON registry")
 
 
 class ModelRegistry:

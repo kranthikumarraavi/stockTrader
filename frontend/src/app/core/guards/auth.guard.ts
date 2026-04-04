@@ -14,7 +14,7 @@ export const authGuard: CanActivateFn = (route, state) => {
     return true;
   }
 
-  // Allow navigation to proceed if token-less mode (dev / no auth backend yet)
-  // TODO: enforce strictly once auth backend is wired
-  return true;
+  return router.createUrlTree(['/auth/login'], {
+    queryParams: { returnUrl: state.url },
+  });
 };

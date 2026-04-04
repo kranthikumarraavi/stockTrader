@@ -1,14 +1,18 @@
 # Order management logic
 
-"""Order Manager â€“ converts equity and option predictions to order intents
-with risk controls, option strategy support, and calibrated sizing."""
+"""Order Manager — converts equity and option predictions to order intents
+with risk controls, option strategy support, and calibrated sizing.
+
+Also provides a bridge to the shared strategy engine via
+``signal_to_orders()`` for unified paper / backtest / live parity.
+"""
 
 from __future__ import annotations
 
 import logging
 import math
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -489,10 +493,55 @@ class OrderManager:
                     expected_price=expected_price,
                     filled_price=price,
                     slippage=round(slip, 4),
-                    timestamp=datetime.utcnow().isoformat() + "Z",
+                    timestamp=datetime.now(timezone.utc).isoformat() + "Z",
                 )
             )
             logger.info(
                 "Fill %s %s %d @ %.2f (expected %.2f, slip %.4f)",
                 side, key, quantity, price, expected_price, slip,
             )
+
+    # ------------------------------------------------------------------ #
+    #  Bridge to shared strategy engine                                   #
+    # ------------------------------------------------------------------ #
+
+    def signal_to_orders(
+        self,
+        signal: "TradingSignal",
+        portfolio: "PortfolioState",
+        current_price: float,
+        strategy_engine: "StrategyEngine | None" = None,
+    ) -> "list[OrderRequest]":
+        """Convert a unified ``TradingSignal`` into ``OrderRequest`` objects
+        via the shared strategy engine.
+
+        This ensures paper / backtest / live all use the same decision logic.
+        Falls back to the legacy ``prediction_to_intent`` path if no
+        strategy engine is provided.
+        """
+        if strategy_engine is not None:
+            return strategy_engine.on_signal(signal, portfolio, current_price)
+
+        # Legacy fallback — map TradingSignal to existing prediction_to_intent
+        action_map = {"long": "buy", "short": "sell", "flat": "hold"}
+        action = action_map.get(signal.signal_direction.value, "hold")
+        intent = self.prediction_to_intent(
+            ticker=signal.instrument,
+            action=action,
+            confidence=signal.confidence_score,
+            current_price=current_price,
+            expected_return=signal.expected_move,
+        )
+        if intent is None:
+            return []
+        # Wrap in shared OrderRequest for forward compatibility
+        from backend.shared.schemas import OrderRequest as SharedOrder, OrderSide, OrderType
+        return [SharedOrder(
+            instrument=intent.ticker,
+            side=OrderSide.BUY if intent.side == "buy" else OrderSide.SELL,
+            order_type=OrderType.MARKET,
+            quantity=intent.quantity,
+            stop_loss=intent.stop_loss,
+            take_profit=intent.take_profit,
+            signal=signal,
+        )]

@@ -1,16 +1,18 @@
-// Live stream service
-import { Injectable, NgZone } from '@angular/core';
+// Live stream service — uses managed WebSocket via core/services/websocket.service
+import { Injectable, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, Subject, BehaviorSubject } from 'rxjs';
+import { retry } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 import { LiveTick, FeedStatus, WatchlistItem, MarketOverview, CategoryInfo, MarketSnapshot } from '../core/models';
+import { WebsocketService, ManagedConnection } from '../core/services/websocket.service';
 
 export { LiveTick, FeedStatus, WatchlistItem, MarketOverview, CategoryInfo, MarketSnapshot };
 
 @Injectable({ providedIn: 'root' })
-export class LiveStreamService {
-  private ws: WebSocket | null = null;
-  private sse: EventSource | null = null;
-  private readonly base = '/api/v1';
+export class LiveStreamService implements OnDestroy {
+  private conn: ManagedConnection | null = null;
+  private readonly base = environment.apiBaseUrl;
 
   /** Emits every incoming tick from multi-symbol stream */
   readonly tick$ = new Subject<LiveTick>();
@@ -23,7 +25,11 @@ export class LiveStreamService {
 
   private sparklineMax = 30;
 
-  constructor(private ngZone: NgZone, private http: HttpClient) {}
+  constructor(private http: HttpClient, private wsService: WebsocketService) {}
+
+  ngOnDestroy(): void {
+    this.disconnect();
+  }
 
   /** Fetch available symbols from backend */
   getSymbols(): Observable<{ symbols: string[] }> {
@@ -38,12 +44,21 @@ export class LiveStreamService {
 
   /** Get market overview (gainers, losers, volume, indices) */
   getMarketOverview(): Observable<MarketOverview> {
-    return this.http.get<MarketOverview>(`${this.base}/stream/market-overview`);
+    return this.http.get<MarketOverview>(`${this.base}/stream/market-overview`).pipe(
+      retry({ count: 2, delay: 1000 }),
+    );
   }
 
-  /** Get symbol categories (Banking, IT, Pharma, etc.) */
+  /** Get symbol categories (Banking, IT, Pharma, Custom, etc.) */
   getCategories(): Observable<CategoryInfo> {
     return this.http.get<CategoryInfo>(`${this.base}/stream/categories`);
+  }
+
+  /** Add a new symbol — downloads data and makes it available */
+  addSymbol(symbol: string): Observable<{ symbol: string; status: string; message: string }> {
+    return this.http.post<{ symbol: string; status: string; message: string }>(
+      `${this.base}/stream/add-symbol?symbol=${encodeURIComponent(symbol)}`, {}
+    );
   }
 
   /** Get current feed status (live vs replay) */
@@ -58,70 +73,37 @@ export class LiveStreamService {
   }
 
   /** Disconnect from live feed (fall back to replay) */
-  disconnectLive(): Observable<any> {
-    return this.http.post(`${this.base}/stream/disconnect-live`, {});
+  disconnectLive(): Observable<Record<string, string>> {
+    return this.http.post<Record<string, string>>(`${this.base}/stream/disconnect-live`, {});
   }
 
   /** Get market snapshot (last close prices when market is closed) */
   getMarketSnapshot(): Observable<MarketSnapshot> {
-    return this.http.get<MarketSnapshot>(`${this.base}/stream/market-snapshot`);
+    return this.http.get<MarketSnapshot>(`${this.base}/stream/market-snapshot`).pipe(
+      retry({ count: 2, delay: 1000 }),
+    );
   }
 
-  /** Connect multi-symbol WebSocket stream. Falls back to SSE. */
+  /** Connect multi-symbol stream via managed WebSocket (auto-reconnect + SSE fallback). */
   connectMulti(symbols: string[]): void {
     this.disconnect();
 
-    const wsUrl = `ws://${window.location.host}${this.base}/stream/multi`;
-
-    try {
-      this.ws = new WebSocket(wsUrl);
-
-      this.ws.onopen = () => {
-        this.connected$.next(true);
-        this.ws!.send(JSON.stringify({ action: 'subscribe', symbols }));
-      };
-
-      this.ws.onmessage = (event) => {
-        this.ngZone.run(() => {
-          const tick: LiveTick = JSON.parse(event.data);
-          this.tick$.next(tick);
-          this.updateWatchlist(tick);
-        });
-      };
-
-      this.ws.onerror = () => {
-        this.ws?.close();
-        this.connectSSE(symbols);
-      };
-
-      this.ws.onclose = () => {
-        if (this.connected$.value) {
-          this.connected$.next(false);
-        }
-      };
-    } catch {
-      this.connectSSE(symbols);
-    }
-  }
-
-  /** SSE fallback for multi-symbol streaming */
-  private connectSSE(symbols: string[]): void {
-    const url = `${this.base}/stream/multi?symbols=${symbols.join(',')}`;
-    this.sse = new EventSource(url);
+    this.conn = this.wsService.connect('/stream/multi');
     this.connected$.next(true);
 
-    this.sse.onmessage = (event) => {
-      this.ngZone.run(() => {
-        const tick: LiveTick = JSON.parse(event.data);
-        this.tick$.next(tick);
-        this.updateWatchlist(tick);
-      });
-    };
+    // Subscribe once the connection is up
+    this.conn.state$.subscribe(state => {
+      this.connected$.next(state === 'connected');
+      if (state === 'connected') {
+        this.conn!.send({ action: 'subscribe', symbols });
+      }
+    });
 
-    this.sse.onerror = () => {
-      this.sse?.close();
-      this.connected$.next(false);
-    };
+    this.conn.messages$.subscribe(msg => {
+      const tick = msg as LiveTick;
+      this.tick$.next(tick);
+      this.updateWatchlist(tick);
+    });
   }
 
   /** Update the watchlist BehaviorSubject with new tick data */
@@ -139,14 +121,8 @@ export class LiveStreamService {
 
   /** Disconnect all streams */
   disconnect(): void {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-    if (this.sse) {
-      this.sse.close();
-      this.sse = null;
-    }
+    this.conn?.disconnect();
+    this.conn = null;
     this.connected$.next(false);
   }
 }

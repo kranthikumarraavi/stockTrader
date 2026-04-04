@@ -2,13 +2,14 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 import { BacktestRunRequest, BacktestRunResponse, BacktestTrade, BacktestResults } from '../core/models';
 
 export { BacktestRunRequest, BacktestRunResponse, BacktestTrade, BacktestResults };
 
 @Injectable({ providedIn: 'root' })
 export class BacktestApiService {
-  private readonly base = '/api/v1';
+  private readonly base = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 

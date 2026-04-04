@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 import { ModelStatus, ModelReloadResponse, ModelVersion, DriftResult, CanaryStatus } from '../core/models';
 
 export { ModelStatus, ModelReloadResponse, ModelVersion, DriftResult, CanaryStatus };
@@ -14,7 +15,7 @@ interface RegistryVersionsEnvelope {
 
 @Injectable({ providedIn: 'root' })
 export class AdminApiService {
-  private readonly base = '/api/v1';
+  private readonly base = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from starlette.responses import StreamingResponse
@@ -137,6 +138,48 @@ async def available_symbols():
 async def symbol_categories():
     """Return symbols grouped by sector/category."""
     return _feed.get_categories()
+
+
+@router.post("/stream/add-symbol")
+async def add_symbol(
+    symbol: str = Query(..., description="NSE symbol to add (e.g. ADANIGREEN)"),
+):
+    """Validate and download data for a new symbol.
+
+    Checks yfinance for the symbol, downloads historical CSV data,
+    and makes it available for streaming, training, and trading.
+    Returns the symbol info including whether it was already available.
+    """
+    import asyncio
+    sym = symbol.strip().upper()
+    if not sym or not sym.replace("_", "").replace("&", "").isalnum():
+        raise HTTPException(400, detail="Invalid symbol format")
+
+    already = sym in set(_feed.available_symbols())
+    if already:
+        return {
+            "symbol": sym,
+            "status": "already_available",
+            "message": f"{sym} is already available for streaming.",
+        }
+
+    # Download in a thread to not block the event loop
+    loop = asyncio.get_event_loop()
+    from backend.services.data_downloader import download_symbol
+    ok = await loop.run_in_executor(None, download_symbol, sym)
+
+    if not ok:
+        raise HTTPException(
+            404,
+            detail=f"Could not find or download data for '{sym}'. "
+                   "Check the symbol is a valid NSE/BSE ticker.",
+        )
+
+    return {
+        "symbol": sym,
+        "status": "added",
+        "message": f"{sym} added successfully. Data downloaded and ready for streaming.",
+    }
 
 
 @router.get("/stream/watchlist")

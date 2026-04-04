@@ -15,6 +15,8 @@ import { PriceStreamService } from '../services/price-stream.service';
 import { LiveStreamService } from '../services/live-stream.service';
 import { MarketApiService } from '../services/market-api.service';
 import { MarketStatus, LiveTick, PriceTick } from '../core/models/market.model';
+import { Timeframe, OhlcSummary, WatchlistEntry } from '../core/models';
+import { environment } from '../../environments/environment';
 
 import {
   TradingChartComponent,
@@ -33,26 +35,6 @@ import {
   OrderFormConfig,
   SymbolResult,
 } from '../shared';
-
-// ── View Models ────────────────────────────────────────────
-
-type Timeframe = '1m' | '5m' | '15m' | '1h' | '1D';
-
-interface OhlcSummary {
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  prevClose: number;
-}
-
-interface WatchlistEntry {
-  symbol: string;
-  price: number;
-  change: number;
-  changePct: number;
-}
 
 @Component({
   selector: 'app-live-chart',
@@ -215,7 +197,7 @@ export class LiveChartComponent implements OnInit, OnDestroy {
     };
 
     // Load last close
-    this.http.get<LiveTick>(`/api/v1/stream/last_close/${encodeURIComponent(this.symbol)}`).pipe(
+    this.http.get<LiveTick>(`${environment.apiBaseUrl}/stream/last_close/${encodeURIComponent(this.symbol)}`).pipe(
       catchError(() => of(null)),
       takeUntil(this.destroy$),
     ).subscribe(tick => {

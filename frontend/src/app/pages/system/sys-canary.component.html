@@ -1,0 +1,42 @@
+<!-- System > Canary -->
+@if (loading) {
+  <app-loading-skeleton shape="card" />
+}
+
+@if (!loading && canary) {
+  <div class="sc__grid">
+    <div class="card sc__badge-card">
+      <span class="text-muted" style="font-size:0.75rem;font-weight:600">Canary Enabled</span>
+      <app-state-badge [label]="canary.enabled ? 'YES' : 'NO'"
+                       [variant]="canary.enabled ? 'success' : 'neutral'" />
+    </div>
+    <app-stat-card label="Stable Version"
+      [value]="canary.stable_version || 'N/A'" icon="box-seam" />
+    <app-stat-card label="Canary Version"
+      [value]="canary.canary_version || 'N/A'" icon="flag" />
+  </div>
+
+  @if (canary.enabled) {
+    <div class="sc__grid">
+      <app-stat-card label="Canary Traffic"
+        [value]="canary.canary_traffic_pct + '%'" icon="diagram-3" />
+      <app-stat-card label="Stable Accuracy"
+        [value]="canary.stable_accuracy !== null ? (canary.stable_accuracy * 100 | number:'1.1-1') + '%' : 'N/A'"
+        icon="bullseye" />
+      <app-stat-card label="Canary Accuracy"
+        [value]="canary.canary_accuracy !== null ? (canary.canary_accuracy * 100 | number:'1.1-1') + '%' : 'N/A'"
+        icon="bullseye" />
+    </div>
+  }
+
+  <button class="btn btn-outline-secondary btn-sm" (click)="load()">
+    <i class="bi bi-arrow-clockwise"></i> Refresh
+  </button>
+}
+
+@if (!loading && !canary) {
+  <app-empty-state icon="flag"
+    heading="Canary unavailable"
+    message="Could not load canary deployment status." />
+  <button class="btn btn-sm btn-outline-secondary mt-2" (click)="load()">Retry</button>
+}

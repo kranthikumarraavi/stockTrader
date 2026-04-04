@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -84,7 +84,7 @@ class PaperAccount:
             self.trade_log.append({
                 "ticker": ticker, "side": side, "quantity": quantity,
                 "price": price, "pnl": pnl,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             })
 
     def check_margin(self, order_cost: float) -> bool:

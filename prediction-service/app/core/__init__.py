@@ -111,7 +111,7 @@ class Settings(BaseSettings):
         "TECHM", "TATASTEEL", "HINDALCO", "JSWSTEEL", "COALINDIA",
         "ONGC", "BPCL", "NTPC", "POWERGRID", "ADANIENT",
         "ASIANPAINT", "ULTRACEMCO", "GRASIM", "NESTLEIND",
-        "TATAMOTORS", "EICHERMOT", "HEROMOTOCO",
+        "EICHERMOT", "HEROMOTOCO",
         "DIVISLAB", "APOLLOHOSP", "TRENT",
     ]
 

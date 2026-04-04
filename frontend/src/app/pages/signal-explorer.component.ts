@@ -1,124 +1,147 @@
-// Signal explorer page component
-import { Component } from '@angular/core';
+import {
+  Component, ChangeDetectionStrategy, ChangeDetectorRef,
+  OnInit, OnDestroy,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { PredictionApiService, PredictionResult } from '../services/prediction-api.service';
+import { Subject, takeUntil, catchError, of, forkJoin } from 'rxjs';
+
+import { PredictionApiService } from '../services/prediction-api.service';
 import { NotificationService } from '../services/notification.service';
+import { PredictionResult } from '../core/models/prediction.model';
+
+import {
+  StatCardComponent, StateBadgeComponent, LoadingSkeletonComponent,
+  EmptyStateComponent, BadgeVariant, StatCardConfig,
+} from '../shared';
 
 @Component({
   selector: 'app-signal-explorer',
   standalone: true,
-  imports: [CommonModule, FormsModule],
-  template: `
-    <div class="page">
-      <h1>Predictions</h1>
-
-      <div class="card mb-2">
-        <h2>Generate Prediction Signal</h2>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Ticker</label>
-            <input [(ngModel)]="ticker" placeholder="RELIANCE" />
-          </div>
-          <div class="form-group">
-            <label>Horizon</label>
-            <select [(ngModel)]="horizon">
-              <option value="1d">1 Day</option>
-              <option value="5d">5 Days</option>
-              <option value="1w">1 Week</option>
-            </select>
-          </div>
-          <div class="form-group" style="justify-content:flex-end">
-            <button class="btn-primary" (click)="fetchSignals()" [disabled]="loading">
-              {{ loading ? 'Fetching...' : 'Get Signal' }}
-            </button>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Batch (comma separated)</label>
-            <input [(ngModel)]="batchInput" placeholder="RELIANCE, TCS, INFY, HDFC" />
-          </div>
-          <div class="form-group" style="justify-content:flex-end">
-            <button class="btn-primary" (click)="fetchBatch()" [disabled]="batchLoading">
-              {{ batchLoading ? 'Fetching...' : 'Batch Predict' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div *ngIf="signals.length > 0" class="card">
-        <h2>Results ({{ signals.length }})</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Ticker</th><th>Action</th><th>Confidence</th>
-              <th>Expected Return</th><th>Model</th>
-              <th>Calibration</th><th>SHAP Features</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let s of signals">
-              <td><strong>{{ s.ticker }}</strong></td>
-              <td>
-                <span class="badge" [ngClass]="s.action === 'buy' ? 'badge-buy' : s.action === 'sell' ? 'badge-sell' : 'badge-hold'">
-                  {{ s.action | uppercase }}
-                </span>
-              </td>
-              <td class="text-mono">{{ (s.confidence * 100) | number:'1.1-1' }}%</td>
-              <td class="text-mono" [class.text-buy]="s.expected_return >= 0" [class.text-sell]="s.expected_return < 0">
-                {{ s.expected_return >= 0 ? '+' : '' }}{{ (s.expected_return * 100) | number:'1.2-2' }}%
-              </td>
-              <td class="text-mono text-sm">{{ s.model_version }}</td>
-              <td>{{ s.calibration_score !== undefined ? (s.calibration_score | number:'1.3-3') : 'N/A' }}</td>
-              <td class="text-sm">{{ s.shap_top_features ? s.shap_top_features.join(', ') : 'N/A' }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div *ngIf="signals.length === 0 && !loading && !batchLoading" class="card" style="text-align:center; padding: 3rem;">
-        <p class="text-muted">Enter a ticker above and click Get Signal to generate a prediction.</p>
-      </div>
-    </div>
-  `
+  imports: [
+    CommonModule, FormsModule,
+    StatCardComponent, StateBadgeComponent, LoadingSkeletonComponent, EmptyStateComponent,
+  ],
+  templateUrl: './signal-explorer.component.html',
+  styleUrl: './signal-explorer.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class SignalExplorerComponent {
+export class SignalExplorerComponent implements OnInit, OnDestroy {
+  // Filters
   ticker = 'RELIANCE';
   horizon = '1d';
-  batchInput = '';
+  batchInput = 'RELIANCE, TCS, INFY, HDFCBANK, ICICIBANK';
+  filterAction: string = 'all';
+
+  // State
   signals: PredictionResult[] = [];
   loading = false;
   batchLoading = false;
 
+  // Summary stats
+  summaryCards: StatCardConfig[] = [];
+
+  private destroy$ = new Subject<void>();
+
   constructor(
+    private cdr: ChangeDetectorRef,
     private predictionApi: PredictionApiService,
-    private notify: NotificationService
+    private notify: NotificationService,
   ) {}
 
-  fetchSignals(): void {
-    if (!this.ticker.trim()) { this.notify.warning('Enter a ticker.'); return; }
+  ngOnInit(): void {
+    this.fetchBatch();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  // ── Computed ──
+  get filteredSignals(): PredictionResult[] {
+    if (this.filterAction === 'all') return this.signals;
+    return this.signals.filter(s => s.action === this.filterAction);
+  }
+
+  get buyCount(): number { return this.signals.filter(s => s.action === 'buy').length; }
+  get sellCount(): number { return this.signals.filter(s => s.action === 'sell').length; }
+  get holdCount(): number { return this.signals.filter(s => s.action === 'hold').length; }
+
+  actionBadge(action: string): BadgeVariant {
+    switch (action) {
+      case 'buy': return 'buy';
+      case 'sell': return 'sell';
+      default: return 'hold';
+    }
+  }
+
+  confidenceClass(c: number): string {
+    if (c >= 0.8) return 'se__conf--high';
+    if (c >= 0.6) return 'se__conf--mid';
+    return 'se__conf--low';
+  }
+
+  // ── Actions ──
+  fetchSingle(): void {
+    if (!this.ticker.trim()) return;
     this.loading = true;
-    this.predictionApi.predict(this.ticker.trim(), this.horizon).subscribe({
-      next: result => {
-        this.signals = [result];
-        this.loading = false;
-      },
-      error: () => { this.loading = false; }
+    this.cdr.markForCheck();
+
+    this.predictionApi.predict(this.ticker.trim(), this.horizon).pipe(
+      catchError(() => { this.notify.error('Prediction failed'); return of(null); }),
+      takeUntil(this.destroy$),
+    ).subscribe(result => {
+      this.loading = false;
+      if (result) {
+        const idx = this.signals.findIndex(s => s.ticker === result.ticker);
+        if (idx >= 0) this.signals[idx] = result;
+        else this.signals = [result, ...this.signals];
+        this.updateSummary();
+      }
+      this.cdr.markForCheck();
     });
   }
 
   fetchBatch(): void {
     const tickers = this.batchInput.split(',').map(t => t.trim()).filter(t => t);
-    if (tickers.length === 0) { this.notify.warning('Enter at least one ticker.'); return; }
+    if (tickers.length === 0) return;
     this.batchLoading = true;
-    this.predictionApi.batchPredict(tickers).subscribe({
-      next: results => {
-        this.signals = results;
-        this.batchLoading = false;
-        this.notify.success(`Received ${results.length} predictions.`);
-      },
-      error: () => { this.batchLoading = false; }
+    this.cdr.markForCheck();
+
+    this.predictionApi.batchPredict(tickers).pipe(
+      catchError(() => { this.notify.error('Batch prediction failed'); return of([] as PredictionResult[]); }),
+      takeUntil(this.destroy$),
+    ).subscribe(results => {
+      this.batchLoading = false;
+      this.signals = results;
+      this.updateSummary();
+      if (results.length) this.notify.success(`${results.length} predictions loaded`);
+      this.cdr.markForCheck();
     });
+  }
+
+  setFilter(action: string): void {
+    this.filterAction = action;
+    this.cdr.markForCheck();
+  }
+
+  trackByTicker(_: number, s: PredictionResult): string { return s.ticker; }
+
+  private updateSummary(): void {
+    const avg = this.signals.length
+      ? this.signals.reduce((a, s) => a + s.confidence, 0) / this.signals.length
+      : 0;
+    const avgReturn = this.signals.length
+      ? this.signals.reduce((a, s) => a + s.expected_return, 0) / this.signals.length
+      : 0;
+
+    this.summaryCards = [
+      { label: 'Total Signals', value: this.signals.length, icon: 'bullseye' },
+      { label: 'Buy', value: this.buyCount, icon: 'arrow-up-circle', trend: 'up' },
+      { label: 'Sell', value: this.sellCount, icon: 'arrow-down-circle', trend: 'down' },
+      { label: 'Avg Confidence', value: `${(avg * 100).toFixed(1)}%`, icon: 'speedometer2' },
+      { label: 'Avg Exp. Return', value: `${(avgReturn * 100).toFixed(2)}%`, icon: 'graph-up-arrow', trend: avgReturn >= 0 ? 'up' : 'down' },
+    ];
   }
 }

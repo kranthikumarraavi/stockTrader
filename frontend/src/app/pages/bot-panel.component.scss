@@ -1,0 +1,286 @@
+@use '../../variables' as *;
+
+.bp {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  // ── Header ──
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__header-right {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  &__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i { color: $primary; }
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    margin: 0.125rem 0 0;
+  }
+
+  // ── Market Banner ──
+  &__market-banner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-radius: $border-radius;
+    border-left: 4px solid $border-color;
+    background: $card-bg;
+    box-shadow: $box-shadow-sm;
+
+    &--open { border-left-color: $success; background: rgba($success, 0.04); }
+    &--pre   { border-left-color: $warning; background: rgba($warning, 0.04); }
+    &--closed { border-left-color: $danger; background: rgba($danger, 0.04); }
+  }
+
+  &__market-left, &__market-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  &__market-right {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+  }
+
+  &__market-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: $danger;
+    flex-shrink: 0;
+
+    &--open { background: $success; box-shadow: 0 0 8px rgba($success, 0.5); }
+    &--pre  { background: $warning; box-shadow: 0 0 8px rgba($warning, 0.5); }
+  }
+
+  &__countdown {
+    font-size: 1rem;
+    font-weight: 600;
+    color: $primary;
+  }
+
+  // ── Grid ──
+  &__grid {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  &__controls, &__status {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  // ── Section ──
+  &__section {
+    padding: 1rem;
+  }
+
+  &__section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  &__section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i { color: $secondary; font-size: 1rem; }
+  }
+
+  // ── Account ──
+  &__account-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__account-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+
+    > div {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+  }
+
+  &__creds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+  }
+
+  // ── Form ──
+  &__field {
+    margin-bottom: 0.625rem;
+
+    .form-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: $secondary;
+      margin-bottom: 0.125rem;
+    }
+  }
+
+  &__form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  // ── Action States ──
+  &__closed-hint {
+    padding: 0.625rem;
+    text-align: center;
+    background: rgba($danger, 0.06);
+    color: $danger;
+    border-radius: $border-radius;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+
+  &__consent {
+    padding: 0.75rem;
+    border-radius: $border-radius;
+    border: 2px solid $warning;
+    background: rgba($warning, 0.08);
+    text-align: center;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  &__consent-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 0.5rem;
+  }
+
+  &__paused {
+    padding: 0.625rem;
+    text-align: center;
+    background: rgba($info, 0.08);
+    color: $info;
+    border-radius: $border-radius;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+  }
+
+  &__action-btns {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  &__running-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: $border-radius;
+    background: rgba($success, 0.08);
+    color: $success;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+  }
+
+  &__pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: $success;
+    animation: bp-pulse 1.5s infinite;
+  }
+
+  @keyframes bp-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.4); }
+  }
+
+  // ── PnL Grid ──
+  &__pnl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+  }
+
+  // ── Positions ──
+  &__position {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid $border-color;
+    border-radius: $border-radius;
+    margin-bottom: 0.5rem;
+    transition: background 0.2s ease;
+
+    &:hover { background: rgba($primary, 0.02); }
+  }
+
+  &__position-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__position-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 0.8125rem;
+  }
+
+  // ── Errors ──
+  &__errors {
+    border-left: 3px solid $danger;
+  }
+
+  &__error {
+    font-size: 0.8125rem;
+    color: $danger;
+    margin-bottom: 0.25rem;
+  }
+}
+
+@media (max-width: 992px) {
+  .bp__grid {
+    grid-template-columns: 1fr;
+  }
+}

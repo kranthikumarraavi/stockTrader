@@ -13,3 +13,6 @@ export * from './bot.model';
 export * from './news.model';
 export * from './system.model';
 export * from './paper.model';
+export * from './execution.model';
+export * from './notification.model';
+export * from './view.model';

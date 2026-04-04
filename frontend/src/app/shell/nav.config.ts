@@ -50,7 +50,10 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     heading: 'System',
     items: [
-      { label: 'Admin',        icon: 'gear-wide-connected', route: '/admin' },
+      { label: 'Models',       icon: 'cpu',                  route: '/system/models' },
+      { label: 'Drift',        icon: 'activity',             route: '/system/drift' },
+      { label: 'Registry',     icon: 'archive',              route: '/system/registry' },
+      { label: 'Canary',       icon: 'flag',                 route: '/system/canary' },
     ],
   },
 ];

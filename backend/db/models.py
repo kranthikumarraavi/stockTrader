@@ -6,7 +6,7 @@ bot state, risk snapshots, trade journal, and system events."""
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -51,7 +51,7 @@ class Order(Base):
     risk_reason = Column(Text, nullable=True)
     # Execution quality
     execution_reason = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class Fill(Base):
@@ -73,7 +73,7 @@ class Fill(Base):
     strike = Column(Float, nullable=True)
     expiry = Column(String(10), nullable=True)
     strategy = Column(String(30), nullable=True)
-    executed_at = Column(DateTime, default=datetime.utcnow)
+    executed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class BacktestJob(Base):
@@ -87,7 +87,7 @@ class BacktestJob(Base):
     strategy = Column(String(50), default="momentum")
     status = Column(String(20), default="pending")
     result_json = Column(Text, nullable=True)
-    submitted_at = Column(DateTime, default=datetime.utcnow)
+    submitted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
 
 
@@ -100,7 +100,7 @@ class AuditLog(Base):
     entity_id = Column(String(36), nullable=True)
     data = Column(Text, nullable=True)  # JSON blob
     correlation_id = Column(String(36), nullable=True, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ class BotState(Base):
     consent_timeout_seconds = Column(Integer, default=300)  # 5 min
     last_heartbeat = Column(DateTime, nullable=True)
     started_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class BotStateTransition(Base):
@@ -134,7 +134,7 @@ class BotStateTransition(Base):
     to_state = Column(String(30), nullable=False)
     reason = Column(String(200), nullable=True)
     data_json = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (Index("ix_bst_timestamp", "timestamp"),)
 
@@ -157,7 +157,7 @@ class RiskSnapshot(Base):
     max_drawdown = Column(Float, default=0.0)
     risk_score = Column(Float, default=0.0)  # 0-100
     data_json = Column(Text, nullable=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +189,7 @@ class TradeJournal(Base):
     # Timestamps
     entered_at = Column(DateTime, nullable=True)
     exited_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +207,7 @@ class SystemEvent(Base):
     source = Column(String(50), nullable=True)
     status = Column(String(20), default="published")  # published / consumed / dlq
     retry_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     consumed_at = Column(DateTime, nullable=True)
 
     __table_args__ = (Index("ix_se_type_status", "event_type", "status"),)
@@ -233,5 +233,5 @@ class ModelLeaderboard(Base):
     symbol = Column(String(10), nullable=True)
     is_champion = Column(Boolean, default=False)
     promoted_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

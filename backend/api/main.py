@@ -19,6 +19,7 @@ Start microservices with:
 """
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -37,22 +38,61 @@ from backend.api.routers import (
     risk, strategy, portfolio, intelligence, options, execution, orchestrator, log,
 )
 
+
+# ----- Lifespan: auto-download market data & background refresh -----
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """Startup / shutdown lifecycle for the FastAPI application."""
+    import threading, logging
+    _log = logging.getLogger("stocktrader.startup")
+
+    def _init_data():
+        try:
+            from backend.services.data_downloader import (
+                get_all_symbols, refresh_all_symbols, start_background_refresh,
+            )
+            symbols = get_all_symbols()
+            _log.info("Auto-downloading data for %d symbols...", len(symbols))
+            results = refresh_all_symbols(symbols)
+            ok = sum(1 for v in results.values() if v)
+            _log.info("Initial download: %d/%d symbols OK", ok, len(results))
+            start_background_refresh(interval_hours=6.0)
+        except Exception as exc:
+            _log.error("Startup data download failed: %s", exc)
+
+    threading.Thread(target=_init_data, name="startup-data-dl", daemon=True).start()
+    yield  # app is running
+    # shutdown: nothing to clean up
+
+
 app = FastAPI(
     title="StockTrader API",
     version="0.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=_lifespan,
 )
 
-# CORS â€“ restrict origins in production via ALLOWED_ORIGINS env var
-_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS — restrict origins in production via ALLOWED_ORIGINS env var
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:4200")
+_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+if "*" in _origins:
+    # Wildcard + credentials is a CORS spec violation — fall back to permissive without creds
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
+    )
 
 # ----- Routers -----
 app.include_router(health.router, prefix="/api/v1")
@@ -73,32 +113,6 @@ app.include_router(options.router, prefix="/api/v1")
 app.include_router(execution.router, prefix="/api/v1")
 app.include_router(orchestrator.router, prefix="/api/v1")
 app.include_router(log.router, prefix="/api/v1")
-
-
-# ----- Startup: auto-download market data & background refresh -----
-@app.on_event("startup")
-async def _startup_download_data():
-    """Download any missing/stale CSV data and start periodic refresh."""
-    import threading, logging
-    _log = logging.getLogger("stocktrader.startup")
-
-    def _init_data():
-        try:
-            from backend.services.data_downloader import (
-                get_all_symbols, refresh_all_symbols, start_background_refresh,
-            )
-            symbols = get_all_symbols()
-            _log.info("Auto-downloading data for %d symbols...", len(symbols))
-            results = refresh_all_symbols(symbols)
-            ok = sum(1 for v in results.values() if v)
-            _log.info("Initial download: %d/%d symbols OK", ok, len(results))
-            # Start background thread to keep data fresh (every 6 hours)
-            start_background_refresh(interval_hours=6.0)
-        except Exception as exc:
-            _log.error("Startup data download failed: %s", exc)
-
-    # Run in a thread so it doesn't block server startup
-    threading.Thread(target=_init_data, name="startup-data-dl", daemon=True).start()
 
 
 # ----- Serve Angular frontend (production builds) -----

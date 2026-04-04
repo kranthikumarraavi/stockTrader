@@ -2,13 +2,14 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
 import { TradeIntentRequest, TradeIntent, Execution } from '../core/models';
 
 export { TradeIntentRequest, TradeIntent, Execution };
 
 @Injectable({ providedIn: 'root' })
 export class TradeApiService {
-  private readonly base = '/api/v1';
+  private readonly base = environment.apiBaseUrl;
 
   constructor(private http: HttpClient) {}
 

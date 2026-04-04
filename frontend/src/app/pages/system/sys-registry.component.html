@@ -1,0 +1,42 @@
+<!-- System > Registry -->
+@if (loading) {
+  <app-loading-skeleton shape="table" />
+}
+
+@if (!loading && versions.length > 0) {
+  <section class="card sr__table-card">
+    <h3 class="sr__section-title"><i class="bi bi-archive"></i> Model Versions</h3>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Created</th>
+            <th>Accuracy</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (v of versions; track v.version) {
+            <tr>
+              <td class="font-monospace fw-bold">{{ v.version }}</td>
+              <td>{{ v.created_at | date:'medium' }}</td>
+              <td>{{ v.accuracy != null ? (v.accuracy * 100 | number:'1.1-1') + '%' : 'N/A' }}</td>
+              <td><app-state-badge [label]="v.status || 'archived'" [variant]="statusBadge(v)" /></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}
+
+@if (!loading && versions.length === 0) {
+  <app-empty-state icon="archive"
+    heading="No versions"
+    message="No model versions found in the registry." />
+}
+
+<button class="btn btn-outline-secondary btn-sm mt-2" (click)="load()">
+  <i class="bi bi-arrow-clockwise"></i> Refresh
+</button>

@@ -10,7 +10,7 @@ import json
 import logging
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class Event:
         self.payload = payload or {}
         self.correlation_id = correlation_id or str(uuid.uuid4())
         self.source = source or "unknown"
-        self.timestamp = datetime.utcnow().isoformat()
+        self.timestamp = datetime.now(timezone.utc).isoformat()
 
     def to_dict(self) -> dict:
         return {

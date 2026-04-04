@@ -1,0 +1,227 @@
+@use '../../variables' as *;
+
+.nf {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  // ── Header ──
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i { color: $primary; }
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    margin: 0.125rem 0 0;
+  }
+
+  // ── Grid ──
+  &__grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 1rem;
+    align-items: start;
+  }
+
+  &__main {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  // ── Section Title ──
+  &__section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i {
+      font-size: 1rem;
+      color: $secondary;
+    }
+  }
+
+  // ── News ──
+  &__news {
+    padding: 1rem;
+  }
+
+  &__news-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+
+  &__news-controls {
+    display: flex;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  &__article {
+    padding: 0.75rem;
+    border: 1px solid $border-color;
+    border-radius: $border-radius;
+    margin-bottom: 0.625rem;
+    transition: background 0.2s ease;
+
+    &:hover {
+      background: rgba($primary, 0.02);
+    }
+  }
+
+  &__article-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  &__article-title {
+    font-size: 0.875rem;
+    line-height: 1.4;
+  }
+
+  &__article-summary {
+    font-size: 0.8125rem;
+    margin: 0.25rem 0;
+    line-height: 1.4;
+  }
+
+  &__article-meta {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.75rem;
+    color: $secondary;
+    margin-top: 0.25rem;
+  }
+
+  // ── Tags ──
+  &__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+  }
+
+  &__tag {
+    padding: 0.125rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.6875rem;
+    background: lighten($border-color, 5%);
+    color: $body-color;
+
+    &--event {
+      background: #fef3c7;
+      color: #92400e;
+    }
+  }
+
+  // ── Sentiment Analyzer ──
+  &__sentiment {
+    padding: 1rem;
+  }
+
+  &__sentiment-result {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: lighten($border-color, 8%);
+    border-radius: $border-radius;
+  }
+
+  &__sentiment-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.375rem;
+  }
+
+  &__keywords {
+    font-size: 0.8125rem;
+    margin-top: 0.375rem;
+  }
+
+  // ── Alerts ──
+  &__alerts-panel {
+    position: sticky;
+    top: 1rem;
+  }
+
+  &__alerts {
+    padding: 1rem;
+  }
+
+  &__alerts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+
+  &__alert {
+    padding: 0.625rem 0.75rem;
+    border-radius: $border-radius;
+    margin-bottom: 0.5rem;
+    border-left: 3px solid $border-color;
+
+    &--high {
+      border-left-color: $danger;
+      background: rgba($danger, 0.04);
+    }
+
+    &--med {
+      border-left-color: $warning;
+      background: rgba($warning, 0.04);
+    }
+
+    &--low {
+      border-left-color: $info;
+      background: rgba($info, 0.04);
+    }
+  }
+
+  &__alert-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+  }
+
+  &__alert-msg {
+    font-size: 0.8125rem;
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  &__alert-type {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 992px) {
+  .nf__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nf__alerts-panel {
+    position: static;
+  }
+}

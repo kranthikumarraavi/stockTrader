@@ -34,7 +34,7 @@ SYMBOL_CATEGORIES: dict[str, list[str]] = {
     "IT": ["TCS", "INFY", "WIPRO", "HCLTECH", "TECHM"],
     "Oil & Gas": ["RELIANCE", "ONGC", "BPCL"],
     "Pharma": ["SUNPHARMA", "DIVISLAB", "DRREDDY", "CIPLA", "APOLLOHOSP"],
-    "Auto": ["MARUTI", "EICHERMOT", "HEROMOTOCO", "M_M", "TATAMOTORS"],
+    "Auto": ["MARUTI", "EICHERMOT", "HEROMOTOCO", "M_M"],
     "Metals & Mining": ["TATASTEEL", "HINDALCO", "JSWSTEEL", "VEDL", "COALINDIA"],
     "FMCG": ["HINDUNILVR", "ITC", "NESTLEIND", "TATACONSUM"],
     "Finance": ["BAJFINANCE", "BAJAJFINSV", "SBILIFE", "HDFCLIFE", "JIOFIN"],
@@ -518,13 +518,26 @@ class PriceFeed:
         }
 
     def get_categories(self) -> dict:
-        """Return symbol categories with availability info."""
+        """Return symbol categories with availability info.
+
+        Includes a dynamic 'Custom' category for any user-added symbols
+        that have CSV data but aren't in the predefined categories.
+        """
         available = set(self.available_symbols())
         result = {}
+        categorised: set[str] = set()
         for cat, syms in SYMBOL_CATEGORIES.items():
             result[cat] = [
                 {"symbol": s, "available": s in available}
                 for s in syms
+            ]
+            categorised.update(syms)
+
+        # Add user-added symbols that have CSV data but aren't in any category
+        custom = sorted(available - categorised)
+        if custom:
+            result["Custom"] = [
+                {"symbol": s, "available": True} for s in custom
             ]
         return result
 
