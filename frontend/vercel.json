@@ -5,8 +5,20 @@
   "installCommand": "npm ci",
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://stocktrader-gateway.onrender.com/api/:path*"
+      "source": "/api/prediction/:path*",
+      "destination": "https://stocktrader-prediction-irpt.onrender.com/api/:path*"
+    },
+    {
+      "source": "/api/admin/:path*",
+      "destination": "https://stocktrader-admin-irpt.onrender.com/api/:path*"
+    },
+    {
+      "source": "/api/trading/:path*",
+      "destination": "https://stocktrader-trading-irpt.onrender.com/api/:path*"
+    },
+    {
+      "source": "/api/market-data/:path*",
+      "destination": "https://stocktrader-market-data-irpt.onrender.com/api/:path*"
     },
     {
       "source": "/((?!assets/).*)",
