@@ -6,12 +6,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-sparkline',
   standalone: true,
   imports: [CommonModule],
-  template: `
-    <svg [attr.viewBox]="'0 0 ' + width + ' ' + height" [attr.width]="width" [attr.height]="height"
-         preserveAspectRatio="none" style="display:block">
-      <polyline [attr.points]="points" fill="none" [attr.stroke]="color" stroke-width="1.5"/>
-    </svg>
-  `
+  templateUrl: './sparkline.component.html'
 })
 export class SparklineComponent implements OnChanges {
   @Input() data: number[] = [];

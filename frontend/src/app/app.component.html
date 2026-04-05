@@ -1,0 +1,11 @@
+    <router-outlet />
+
+    <!-- Global toast overlay -->
+    <div class="st-toast-container">
+      @for (t of toasts; track t.id) {
+        <div class="st-toast" [ngClass]="'st-toast-' + t.type" (click)="notify.remove(t.id)">
+          {{ t.message }}
+        </div>
+      }
+    </div>
+  

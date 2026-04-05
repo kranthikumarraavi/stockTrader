@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
 COPY scripts/ ./scripts/
+COPY models/ ./models/
 COPY storage/ ./storage/
 
 # Create runtime directories

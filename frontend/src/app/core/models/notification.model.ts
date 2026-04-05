@@ -7,3 +7,12 @@ export interface Toast {
   message: string;
   type: ToastType;
 }
+
+export interface AppNotification {
+  id: number;
+  message: string;
+  type: ToastType;
+  source: string;
+  createdAt: string;
+  read: boolean;
+}

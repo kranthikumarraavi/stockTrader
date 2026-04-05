@@ -4,15 +4,39 @@
 </button>
 
 <!-- Symbol search -->
-<div class="topbar-search">
+<div class="topbar-search" (appClickOutside)="closeSearchDropdown()">
   <i class="bi bi-search search-icon"></i>
   <input type="text"
          placeholder="Search symbol… (e.g. RELIANCE, NIFTY)"
          [value]="searchQuery"
          (input)="onSearchInput($event)"
-         (keydown.enter)="onSearchSubmit()"
+         (focus)="onSearchFocus()"
+         (keydown)="onSearchKeydown($event)"
          aria-label="Search symbol" />
-  <span class="kbd-hint d-none d-lg-inline">Ctrl+K</span>
+  <button type="button" class="kbd-hint d-none d-lg-inline topbar-search__command-btn" (click)="triggerCommandPalette()">
+    Ctrl+K
+  </button>
+
+  @if (showSearchDropdown) {
+    <div class="topbar-search__dropdown">
+      @if (filteredSymbols.length === 0) {
+        <div class="topbar-search__empty">No matching symbols</div>
+      } @else {
+        @for (symbol of filteredSymbols; track symbol) {
+          <button
+            type="button"
+            class="topbar-search__item"
+            [class.topbar-search__item--active]="$index === activeSuggestion"
+            (mouseenter)="activeSuggestion = $index"
+            (click)="selectSuggestion(symbol)"
+          >
+            <span class="topbar-search__item-symbol">{{ symbol }}</span>
+            <span class="topbar-search__item-open">Open chart</span>
+          </button>
+        }
+      }
+    </div>
+  }
 </div>
 
 <span class="topbar-spacer"></span>
@@ -29,6 +53,10 @@
   <button class="action-btn" (click)="toggleTheme.emit()" [title]="darkMode ? 'Switch to light mode' : 'Switch to dark mode'">
     <i class="bi" [ngClass]="darkMode ? 'bi-sun' : 'bi-moon'"></i>
   </button>
+  <button class="action-btn" (click)="triggerCommandPalette()" title="Command palette">
+    <i class="bi bi-command"></i>
+    <span class="action-label">Command</span>
+  </button>
 </div>
 
 <!-- Market session badge -->
@@ -42,11 +70,21 @@
   <span class="badge-label">{{ marketPhaseLabel }}</span>
 </div>
 
+<div class="status-pill" [ngClass]="wsConnected ? 'status-pill--ok' : 'status-pill--warn'">
+  <i class="bi" [ngClass]="wsConnected ? 'bi-wifi' : 'bi-wifi-off'"></i>
+  {{ wsConnected ? 'Live WS' : 'WS Down' }}
+</div>
+
+<div class="status-pill" [ngClass]="apiStatus === 'ok' ? 'status-pill--ok' : 'status-pill--err'">
+  <i class="bi bi-hdd-network"></i>
+  API {{ apiStatus | uppercase }}
+</div>
+
 <!-- Notifications -->
-<button class="topbar-bell" title="Notifications">
+<button class="topbar-bell" title="Notifications" (click)="notificationsToggle.emit()">
   <i class="bi bi-bell"></i>
-  @if (hasNotifications) {
-    <span class="bell-badge"></span>
+  @if (unreadCount > 0) {
+    <span class="bell-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
   }
 </button>
 

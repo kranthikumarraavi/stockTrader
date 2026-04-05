@@ -60,6 +60,7 @@ $footer-height:      28px;
   flex: 1;
   min-width: 0; // prevent flex blowout
   overflow: hidden;
+  position: relative;
 }
 
 // ── Scrollable page area ──
@@ -67,6 +68,19 @@ $footer-height:      28px;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.shell-route-loader {
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba($primary, 0.2) 15%, $primary 40%, rgba($primary, 0.2) 75%, transparent 100%);
+  background-size: 240px 100%;
+  animation: shellLoader 1.1s linear infinite;
+}
+
+@keyframes shellLoader {
+  from { background-position: -240px 0; }
+  to { background-position: 100% 0; }
 }
 
 // ── Mobile overlay ──
@@ -86,4 +100,241 @@ $footer-height:      28px;
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+
+.shell-notifications {
+  position: absolute;
+  top: $topbar-height + 6px;
+  right: 0.9rem;
+  width: min(420px, calc(100% - 1.2rem));
+  max-height: min(70vh, 620px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid $border-color;
+  border-radius: $border-radius-lg;
+  background: $card-bg;
+  box-shadow: $box-shadow-lg;
+  z-index: 1060;
+  overflow: hidden;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0.85rem;
+    border-bottom: 1px solid $border-color;
+    background: rgba($primary, 0.04);
+
+    h3 {
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: $body-color;
+    }
+  }
+
+  &__actions {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+  }
+
+  &__list {
+    overflow-y: auto;
+    padding: 0.25rem;
+  }
+
+  &__empty {
+    padding: 0.9rem;
+    font-size: 0.82rem;
+    color: $secondary;
+    text-align: center;
+  }
+}
+
+.shell-notification-item {
+  width: 100%;
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: $border-radius;
+  padding: 0.55rem 0.6rem;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba($primary, 0.08);
+  }
+
+  &--read {
+    opacity: 0.78;
+  }
+
+  &__dot {
+    margin-top: 0.28rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.08rem;
+    min-width: 0;
+
+    strong {
+      font-size: 0.76rem;
+      color: $body-color;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    span {
+      font-size: 0.82rem;
+      color: $body-color;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    small {
+      color: $secondary;
+      font-size: 0.7rem;
+    }
+  }
+}
+
+.dot-success { background: $success; }
+.dot-error { background: $danger; }
+.dot-warning { background: $warning; }
+.dot-info { background: $info; }
+
+.shell-mini-btn {
+  border: 1px solid $border-color;
+  border-radius: $border-radius-sm;
+  background: transparent;
+  color: $secondary;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+
+  &:hover {
+    border-color: rgba($primary, 0.4);
+    color: $primary;
+    background: rgba($primary, 0.08);
+  }
+}
+
+.shell-command__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 13, 24, 0.45);
+  z-index: 1100;
+  backdrop-filter: blur(3px);
+}
+
+.shell-command {
+  position: fixed;
+  top: 12vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(760px, calc(100% - 1.2rem));
+  max-height: 70vh;
+  border: 1px solid $border-color;
+  border-radius: $border-radius-lg;
+  background: $card-bg;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  z-index: 1101;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  &__input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-bottom: 1px solid $border-color;
+    padding: 0.6rem 0.75rem;
+    background: rgba($primary, 0.04);
+  }
+
+  &__input-icon {
+    color: $secondary;
+    font-size: 0.95rem;
+  }
+
+  &__input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    color: $body-color;
+    font-size: 0.93rem;
+    outline: none;
+  }
+
+  &__results {
+    overflow-y: auto;
+    padding: 0.35rem;
+  }
+
+  &__empty {
+    padding: 0.9rem;
+    text-align: center;
+    color: $secondary;
+    font-size: 0.82rem;
+  }
+
+  &__item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    border: none;
+    background: transparent;
+    text-align: left;
+    border-radius: $border-radius;
+    padding: 0.45rem 0.52rem;
+    cursor: pointer;
+    color: $body-color;
+    transition: background 0.1s ease;
+
+    &:hover,
+    &--active {
+      background: rgba($primary, 0.1);
+    }
+  }
+
+  &__item-icon {
+    width: 26px;
+    height: 26px;
+    border: 1px solid rgba($primary, 0.22);
+    border-radius: $border-radius-sm;
+    color: $primary;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__item-main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+
+    strong {
+      font-size: 0.83rem;
+      line-height: 1.2;
+    }
+
+    small {
+      font-size: 0.72rem;
+      color: $secondary;
+      line-height: 1.2;
+    }
+  }
 }

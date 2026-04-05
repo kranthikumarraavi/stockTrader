@@ -1,0 +1,15 @@
+    <div class="ticker-wrap">
+      <div class="ticker-track" [style.animationDuration]="(items.length * 3) + 's'">
+        <ng-container *ngFor="let item of doubledItems">
+          <span class="ticker-item" [ngClass]="{'up': (item.change_pct ?? 0) >= 0, 'down': (item.change_pct ?? 0) < 0}">
+            <strong>{{ item.symbol }}</strong>
+            ₹{{ item.price | number:'1.2-2' }}
+            <span class="change">
+              {{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }}
+              {{ item.change_pct | number:'1.2-2' }}%
+            </span>
+          </span>
+        </ng-container>
+      </div>
+    </div>
+  

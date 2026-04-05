@@ -24,11 +24,59 @@
   <div class="shell-content">
     <app-topbar
       [darkMode]="darkMode"
+      [wsConnected]="wsConnected"
+      [apiStatus]="apiStatus"
+      [unreadCount]="unreadNotifications"
       (menuToggle)="mobileMenuOpen = !mobileMenuOpen"
       (quickTrade)="onQuickTrade()"
       (refresh)="onRefresh()"
-      (toggleTheme)="toggleDarkMode()">
+      (toggleTheme)="toggleDarkMode()"
+      (commandPalette)="openCommandPalette()"
+      (symbolSearched)="onTopbarSymbolSearched($event)"
+      (notificationsToggle)="toggleNotificationsPanel()">
     </app-topbar>
+
+    @if (routeLoading) {
+      <div class="shell-route-loader" aria-hidden="true"></div>
+    }
+
+    @if (notificationsOpen) {
+      <aside class="shell-notifications" (appClickOutside)="notificationsOpen = false">
+        <header class="shell-notifications__header">
+          <h3>Activity Center</h3>
+          <div class="shell-notifications__actions">
+            <button type="button" class="shell-mini-btn" (click)="clearNotifications()">Clear</button>
+            <button type="button" class="shell-mini-btn" (click)="notificationsOpen = false">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+        </header>
+
+        <div class="shell-notifications__list">
+          @if (!notifications.length) {
+            <div class="shell-notifications__empty">
+              No notifications yet.
+            </div>
+          } @else {
+            @for (n of notifications; track trackByNotification($index, n)) {
+              <button
+                type="button"
+                class="shell-notification-item"
+                [class.shell-notification-item--read]="n.read"
+                (click)="markNotificationRead(n.id)"
+              >
+                <span class="shell-notification-item__dot" [ngClass]="'dot-' + n.type"></span>
+                <span class="shell-notification-item__content">
+                  <strong>{{ n.source }}</strong>
+                  <span>{{ n.message }}</span>
+                  <small>{{ n.createdAt | date:'MMM d, HH:mm:ss' }}</small>
+                </span>
+              </button>
+            }
+          }
+        </div>
+      </aside>
+    }
 
     <main class="shell-page" id="main-content" role="main">
       <router-outlet />
@@ -41,3 +89,48 @@
     </app-footer>
   </div>
 </div>
+
+@if (commandPaletteOpen) {
+  <div class="shell-command__backdrop" (click)="closeCommandPalette()"></div>
+  <section class="shell-command" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="shell-command__input-wrap">
+      <i class="bi bi-command shell-command__input-icon"></i>
+      <input
+        type="text"
+        class="shell-command__input"
+        [value]="commandQuery"
+        (input)="onCommandQueryInput($event)"
+        placeholder="Search pages, actions, or type symbol..."
+        autofocus
+      />
+      <span class="kbd-hint">ESC</span>
+    </div>
+
+    <div class="shell-command__results">
+      @if (!filteredCommands.length) {
+        <div class="shell-command__empty">No commands found.</div>
+      } @else {
+        @for (cmd of filteredCommands; track trackByCommand($index, cmd)) {
+          <button
+            type="button"
+            class="shell-command__item"
+            [class.shell-command__item--active]="$index === commandCursor"
+            (mouseenter)="commandCursor = $index"
+            (click)="executeCommand(cmd)"
+          >
+            <span class="shell-command__item-icon">
+              <i class="bi" [ngClass]="'bi-' + cmd.icon"></i>
+            </span>
+            <span class="shell-command__item-main">
+              <strong>{{ cmd.title }}</strong>
+              <small>{{ cmd.subtitle }}</small>
+            </span>
+            @if (cmd.hotkey) {
+              <span class="kbd-hint">{{ cmd.hotkey }}</span>
+            }
+          </button>
+        }
+      }
+    </div>
+  </section>
+}

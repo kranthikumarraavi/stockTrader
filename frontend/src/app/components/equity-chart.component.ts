@@ -12,37 +12,8 @@ interface DrawdownPoint {
   selector: 'app-equity-chart',
   standalone: true,
   imports: [CommonModule],
-  template: `
-    <div *ngIf="data.length === 0"><p>No equity data yet.</p></div>
-    <div *ngIf="data.length > 0">
-      <h3>Equity Curve</h3>
-      <div class="chart-container">
-        <svg [attr.viewBox]="'0 0 ' + width + ' ' + eqHeight" preserveAspectRatio="none" class="chart-svg">
-          <polyline [attr.points]="equityPoints" fill="none" stroke="#2196f3" stroke-width="2"/>
-        </svg>
-        <div class="axis-labels">
-          <span>₹{{ minEquity | number:'1.0-0' }}</span>
-          <span>₹{{ maxEquity | number:'1.0-0' }}</span>
-        </div>
-      </div>
-      <h3>Drawdown</h3>
-      <div class="chart-container dd">
-        <svg [attr.viewBox]="'0 0 ' + width + ' ' + ddHeight" preserveAspectRatio="none" class="chart-svg">
-          <polyline [attr.points]="drawdownPoints" fill="none" stroke="#f44336" stroke-width="2"/>
-        </svg>
-        <div class="axis-labels">
-          <span>{{ minDrawdown | number:'1.1-1' }}%</span>
-          <span>0%</span>
-        </div>
-      </div>
-    </div>
-  `,
-  styles: [`
-    .chart-container { position: relative; width: 100%; margin-bottom: 1rem; }
-    .chart-svg { width: 100%; height: 200px; border: 1px solid #eee; }
-    .dd .chart-svg { height: 120px; }
-    .axis-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: #666; }
-  `]
+  templateUrl: './equity-chart.component.html',
+  styleUrl: './equity-chart.component.scss'
 })
 export class EquityChartComponent implements OnChanges {
   @Input() data: { date: string; equity: number }[] = [];

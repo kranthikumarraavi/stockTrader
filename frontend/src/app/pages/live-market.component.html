@@ -1,0 +1,289 @@
+<app-ticker-tape [items]="watchlistArray"></app-ticker-tape>
+
+<div class="page lm">
+  <header class="lm__header">
+    <div class="lm__header-left">
+      <h1 class="lm__title">Live Market Stream</h1>
+      <div class="lm__meta">
+        <span class="lm__meta-item">
+          <span class="feed-badge" [ngClass]="feedMode === 'live' ? 'feed-live' : 'feed-replay'">
+            {{ feedMode === 'live' ? 'LIVE' : 'REPLAY' }}
+          </span>
+        </span>
+        <span class="lm__meta-item">
+          <span class="conn-dot" [ngClass]="connected ? 'dot-on' : 'dot-off'"></span>
+          {{ connected ? 'Streaming' : 'Disconnected' }}
+        </span>
+        <span class="lm__meta-item" *ngIf="connected">{{ tickCount | number }} ticks</span>
+        <span class="lm__meta-item">{{ totalSymbols }} symbols</span>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      class="lm__refresh-btn"
+      (click)="loadSnapshot()"
+      [disabled]="connected"
+      title="Refresh snapshot"
+    >
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+  </header>
+
+  <section class="card lm__market-banner" [ngClass]="'market-' + (market?.phase || 'closed')">
+    <div class="lm__market-left">
+      <span
+        class="market-dot"
+        [ngClass]="{
+          'dot-open': market?.phase === 'open',
+          'dot-pre': market?.phase === 'pre_open',
+          'dot-closed': market?.phase !== 'open' && market?.phase !== 'pre_open'
+        }"
+      ></span>
+      <div>
+        <strong>{{ market?.message || 'Loading market status...' }}</strong>
+        <div class="lm__subtle">{{ market?.ist_now }}</div>
+      </div>
+    </div>
+
+    <div class="lm__market-right">
+      <div class="lm__subtle">{{ market?.next_event }}</div>
+      <strong>{{ market?.next_event_time }}</strong>
+    </div>
+  </section>
+
+  <section class="lm__indices-row">
+    <article
+      *ngFor="let idx of indicesData; trackBy: trackBySymbol"
+      class="card lm__index-card"
+      (click)="selectSymbol(idx.symbol)"
+      [ngClass]="{ 'idx-selected': selectedSymbol === idx.symbol }"
+    >
+      <div class="lm__index-name">{{ indexDisplayName(idx.symbol) }}</div>
+      <div class="lm__index-price" [ngClass]="(idx.change_pct ?? 0) >= 0 ? 'up' : 'down'">
+        {{ idx.price | number:'1.2-2' }}
+      </div>
+      <div class="lm__index-change" [ngClass]="(idx.change_pct ?? 0) >= 0 ? 'up' : 'down'">
+        {{ (idx.change_pct ?? 0) >= 0 ? '▲' : '▼' }}
+        {{ idx.change | number:'1.2-2' }}
+        ({{ idx.change_pct | number:'1.2-2' }}%)
+      </div>
+    </article>
+
+    <article *ngIf="indicesData.length === 0" class="card lm__index-card lm__index-card--placeholder">
+      <div class="text-muted">Loading indices...</div>
+    </article>
+  </section>
+
+  <section class="card lm__category-bar">
+    <div class="lm__cat-chips">
+      <button type="button" class="lm__cat-chip" [ngClass]="{ 'cat-active': activeCategory === 'All' }" (click)="filterCategory('All')">
+        All ({{ totalSymbols }})
+      </button>
+      <button
+        *ngFor="let cat of categoryNames; trackBy: trackByIdentity"
+        type="button"
+        class="lm__cat-chip"
+        [ngClass]="{ 'cat-active': activeCategory === cat }"
+        (click)="filterCategory(cat)"
+      >
+        {{ cat }} ({{ categorySymbolCounts[cat] || 0 }})
+      </button>
+    </div>
+  </section>
+
+  <section class="card lm__add-symbol">
+    <div class="lm__inline-form">
+      <input
+        class="form-control lm__input lm__input--grow"
+        [(ngModel)]="newSymbolInput"
+        placeholder="Add new symbol (e.g. ADANIGREEN)"
+        (keydown.enter)="addNewSymbol()"
+      />
+      <button
+        type="button"
+        class="lm__btn lm__btn--primary"
+        (click)="addNewSymbol()"
+        [disabled]="addingSymbol || !newSymbolInput.trim()"
+      >
+        {{ addingSymbol ? 'Adding...' : '+ Add Symbol' }}
+      </button>
+      <span *ngIf="addSymbolMsg" class="lm__status-msg" [ngClass]="addSymbolError ? 'text-sell' : 'text-buy'">
+        {{ addSymbolMsg }}
+      </span>
+    </div>
+  </section>
+
+  <section
+    *ngIf="market && market.phase !== 'open' && market.phase !== 'pre_open' && watchlistArray.length > 0"
+    class="card lm__last-close-banner"
+  >
+    <i class="bi bi-info-circle"></i>
+    <span>Showing <strong>last closing prices</strong> before market close. Prices will update automatically when market reopens.</span>
+  </section>
+
+  <section class="card lm__controls">
+    <div class="lm__controls-grid">
+      <div class="lm__field lm__field--symbols">
+        <label class="form-label">Symbols (comma-separated)</label>
+        <input class="form-control lm__input" [(ngModel)]="symbolInput" [placeholder]="placeholderSymbols" />
+      </div>
+
+      <div class="lm__actions">
+        <button type="button" class="lm__btn lm__btn--live" (click)="connectLiveFeed()" [disabled]="connectingLive || feedMode === 'live'">
+          {{ connectingLive ? 'Connecting...' : (feedMode === 'live' ? 'AngelOne Live' : 'Connect AngelOne') }}
+        </button>
+        <button type="button" class="lm__btn lm__btn--replay" (click)="disconnectLiveFeed()" *ngIf="feedMode === 'live'">
+          Switch to Replay
+        </button>
+        <button type="button" class="lm__btn lm__btn--primary" (click)="startStream()" [disabled]="connected">
+          {{ connected ? 'Streaming' : 'Start Stream' }}
+        </button>
+        <button type="button" class="lm__btn lm__btn--danger" (click)="stopStream()" *ngIf="connected">Stop</button>
+        <button type="button" class="lm__btn lm__btn--secondary" (click)="loadSnapshot()" [disabled]="connected">Snapshot</button>
+        <button
+          type="button"
+          class="lm__btn lm__btn--secondary"
+          (click)="streamAllSymbols()"
+          [disabled]="connected"
+          title="Stream all available symbols"
+        >
+          All Stocks
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <div class="lm__grid">
+    <section class="card lm__grid-watchlist">
+      <h2 class="lm__card-title">Live Watchlist</h2>
+      <div class="lm__table-wrap">
+        <table class="lm__table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Price</th>
+              <th>Change</th>
+              <th>%</th>
+              <th>Bid</th>
+              <th>Ask</th>
+              <th>Volume</th>
+              <th>Trend</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              *ngFor="let item of watchlistArray; trackBy: trackBySymbol"
+              [ngClass]="{ 'lm__row-selected': selectedSymbol === item.symbol }"
+              (click)="selectSymbol(item.symbol)"
+            >
+              <td><strong>{{ item.symbol }}</strong></td>
+              <td class="lm__price-cell" [ngClass]="(item.change ?? 0) >= 0 ? 'up' : 'down'">₹{{ item.price | number:'1.2-2' }}</td>
+              <td [ngClass]="(item.change ?? 0) >= 0 ? 'up' : 'down'">{{ (item.change ?? 0) >= 0 ? '+' : '' }}{{ item.change | number:'1.2-2' }}</td>
+              <td [ngClass]="(item.change_pct ?? 0) >= 0 ? 'up' : 'down'">
+                {{ (item.change_pct ?? 0) >= 0 ? '▲' : '▼' }} {{ item.change_pct | number:'1.2-2' }}%
+              </td>
+              <td class="text-muted">{{ item.bid | number:'1.2-2' }}</td>
+              <td class="text-muted">{{ item.ask | number:'1.2-2' }}</td>
+              <td>{{ item.volume | number }}</td>
+              <td>
+                <app-sparkline
+                  [data]="item.sparkline"
+                  [color]="(item.change_pct ?? 0) >= 0 ? '#2e7d32' : '#d32f2f'"
+                  [width]="80"
+                  [height]="24"
+                ></app-sparkline>
+              </td>
+              <td>
+                <button type="button" class="lm__mini-btn" (click)="selectSymbol(item.symbol); $event.stopPropagation()">Chart</button>
+              </td>
+            </tr>
+            <tr *ngIf="watchlistArray.length === 0">
+              <td colspan="9" class="lm__empty">Start streaming or load a snapshot to see live prices.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card lm__grid-chart">
+      <div class="lm__chart-head">
+        <h2 class="lm__card-title">{{ selectedSymbol || 'Select a symbol' }}</h2>
+        <div *ngIf="selectedTick" class="lm__selected-price" [ngClass]="(selectedTick.change ?? 0) >= 0 ? 'up' : 'down'">
+          ₹{{ selectedTick.price | number:'1.2-2' }}
+          <span class="lm__selected-price-change">
+            {{ (selectedTick.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ selectedTick.change_pct | number:'1.2-2' }}%
+          </span>
+        </div>
+      </div>
+      <app-live-price-chart [data]="selectedChartData"></app-live-price-chart>
+      <div *ngIf="selectedChartData.length === 0" class="lm__chart-empty">
+        <p class="text-muted">Click a symbol in the watchlist to see its live chart.</p>
+      </div>
+    </section>
+
+    <section class="card lm__grid-gainers">
+      <h3 class="lm__panel-title lm__panel-title--gainer"><i class="bi bi-graph-up-arrow"></i> Top Gainers</h3>
+      <div *ngFor="let g of overview?.gainers || []; trackBy: trackBySymbol" class="lm__overview-row">
+        <span class="lm__ov-sym" (click)="selectSymbol(g.symbol)">{{ g.symbol }}</span>
+        <span class="up">₹{{ g.price | number:'1.2-2' }}</span>
+        <span class="lm__badge lm__badge--up">+{{ g.change_pct | number:'1.2-2' }}%</span>
+      </div>
+      <div *ngIf="!overview?.gainers?.length" class="lm__empty">No data yet.</div>
+    </section>
+
+    <section class="card lm__grid-losers">
+      <h3 class="lm__panel-title lm__panel-title--loser"><i class="bi bi-graph-down-arrow"></i> Top Losers</h3>
+      <div *ngFor="let l of overview?.losers || []; trackBy: trackBySymbol" class="lm__overview-row">
+        <span class="lm__ov-sym" (click)="selectSymbol(l.symbol)">{{ l.symbol }}</span>
+        <span class="down">₹{{ l.price | number:'1.2-2' }}</span>
+        <span class="lm__badge lm__badge--down">{{ l.change_pct | number:'1.2-2' }}%</span>
+      </div>
+      <div *ngIf="!overview?.losers?.length" class="lm__empty">No data yet.</div>
+    </section>
+
+    <section class="card lm__grid-volume">
+      <h3 class="lm__panel-title"><i class="bi bi-bar-chart-fill"></i> Volume Leaders</h3>
+      <div *ngFor="let v of overview?.volume_leaders || []; trackBy: trackBySymbol" class="lm__overview-row">
+        <span class="lm__ov-sym" (click)="selectSymbol(v.symbol)">{{ v.symbol }}</span>
+        <span>{{ v.volume | number }}</span>
+        <span [ngClass]="(v.change_pct ?? 0) >= 0 ? 'up' : 'down'">
+          {{ (v.change_pct ?? 0) >= 0 ? '▲' : '▼' }}{{ v.change_pct | number:'1.2-2' }}%
+        </span>
+      </div>
+      <div *ngIf="!(overview?.volume_leaders?.length)" class="lm__empty">No data yet.</div>
+    </section>
+
+    <section class="card lm__grid-feed">
+      <h3 class="lm__panel-title"><i class="bi bi-broadcast-pin"></i> Live Trade Feed</h3>
+      <div class="lm__feed-scroll">
+        <div
+          *ngFor="let f of tradeFeed; trackBy: trackBySymbol"
+          class="lm__feed-item"
+          [ngClass]="(f.change_pct ?? 0) >= 0 ? 'feed-up' : 'feed-down'"
+        >
+          <span class="lm__feed-time">{{ f.timestamp | date:'HH:mm:ss' }}</span>
+          <strong>{{ f.symbol }}</strong>
+          <span>₹{{ f.price | number:'1.2-2' }}</span>
+          <span class="lm__feed-vol">Vol: {{ f.volume | number }}</span>
+        </div>
+        <div *ngIf="tradeFeed.length === 0" class="lm__empty">Trade feed appears when streaming starts.</div>
+      </div>
+    </section>
+
+    <section class="card lm__grid-ohlc" *ngIf="selectedTick">
+      <h3 class="lm__panel-title"><i class="bi bi-grid"></i> {{ selectedSymbol }} Details</h3>
+      <div class="lm__ohlc-grid">
+        <div class="lm__ohlc-item"><span class="lm__ohlc-label">Open</span><span class="lm__ohlc-value">₹{{ selectedTick.open | number:'1.2-2' }}</span></div>
+        <div class="lm__ohlc-item"><span class="lm__ohlc-label">High</span><span class="lm__ohlc-value up">₹{{ selectedTick.high | number:'1.2-2' }}</span></div>
+        <div class="lm__ohlc-item"><span class="lm__ohlc-label">Low</span><span class="lm__ohlc-value down">₹{{ selectedTick.low | number:'1.2-2' }}</span></div>
+        <div class="lm__ohlc-item"><span class="lm__ohlc-label">Close</span><span class="lm__ohlc-value">₹{{ selectedTick.close | number:'1.2-2' }}</span></div>
+        <div class="lm__ohlc-item"><span class="lm__ohlc-label">Prev Close</span><span class="lm__ohlc-value">₹{{ selectedTick.prev_close | number:'1.2-2' }}</span></div>
+        <div class="lm__ohlc-item"><span class="lm__ohlc-label">Bid</span><span class="lm__ohlc-value">₹{{ selectedTick.bid | number:'1.2-2' }}</span></div>
+        <div class="lm__ohlc-item"><span class="lm__ohlc-label">Ask</span><span class="lm__ohlc-value">₹{{ selectedTick.ask | number:'1.2-2' }}</span></div>
+        <div class="lm__ohlc-item"><span class="lm__ohlc-label">Volume</span><span class="lm__ohlc-value">{{ selectedTick.volume | number }}</span></div>
+      </div>
+    </section>
+  </div>
+</div>
