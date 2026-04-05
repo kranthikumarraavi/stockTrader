@@ -35,10 +35,34 @@ def _bool_map(api_key: str, client_id: str, mpin: str, totp_secret: str) -> dict
 
 def get_angel_profile_sync() -> dict[str, Any]:
     """Verify AngelOne credential presence and optionally fetch account profile."""
-    api_key = _env_first_non_empty("ANGEL_API_KEY", "SMARTAPI_API_KEY", "ANGELONE_API_KEY")
-    client_id = _env_first_non_empty("ANGEL_CLIENT_ID", "SMARTAPI_CLIENT_ID", "ANGEL_CLIENT_CODE")
-    mpin = _env_first_non_empty("ANGEL_MPIN", "ANGEL_CLIENT_PIN", "SMARTAPI_MPIN")
-    totp_secret = _env_first_non_empty("ANGEL_TOTP_SECRET", "SMARTAPI_TOTP_SECRET", "ANGEL_TOTP")
+    api_key = _env_first_non_empty(
+        "ANGEL_API_KEY",
+        "SMARTAPI_API_KEY",
+        "ANGELONE_API_KEY",
+        "ANGEL_ONE_API_KEY",
+        "SMARTAPI_KEY",
+    )
+    client_id = _env_first_non_empty(
+        "ANGEL_CLIENT_ID",
+        "SMARTAPI_CLIENT_ID",
+        "ANGEL_CLIENT_CODE",
+        "ANGEL_CLIENTID",
+        "ANGEL_USER_ID",
+        "ANGEL_USERID",
+    )
+    mpin = _env_first_non_empty(
+        "ANGEL_MPIN",
+        "ANGEL_CLIENT_PIN",
+        "SMARTAPI_MPIN",
+        "ANGEL_PIN",
+    )
+    totp_secret = _env_first_non_empty(
+        "ANGEL_TOTP_SECRET",
+        "SMARTAPI_TOTP_SECRET",
+        "ANGEL_TOTP",
+        "ANGEL_TOTP_KEY",
+        "ANGEL_OTP_SECRET",
+    )
 
     creds = _bool_map(api_key, client_id, mpin, totp_secret)
     if not all(creds.values()):

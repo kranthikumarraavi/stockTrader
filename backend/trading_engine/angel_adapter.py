@@ -26,11 +26,47 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
+def _env_first_non_empty(*keys: str) -> str:
+    for key in keys:
+        value = os.getenv(key, "")
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
 PAPER_MODE = os.getenv("PAPER_MODE", "true").lower() == "true"
-ANGEL_API_KEY = os.getenv("ANGEL_API_KEY", "")
-ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID", "")
-ANGEL_MPIN = os.getenv("ANGEL_MPIN", "") or os.getenv("ANGEL_CLIENT_PIN", "")
-ANGEL_TOTP_SECRET = os.getenv("ANGEL_TOTP_SECRET", "")
+ANGEL_API_KEY = _env_first_non_empty(
+    "ANGEL_API_KEY",
+    "SMARTAPI_API_KEY",
+    "ANGELONE_API_KEY",
+    "ANGEL_ONE_API_KEY",
+    "SMARTAPI_KEY",
+)
+ANGEL_CLIENT_ID = _env_first_non_empty(
+    "ANGEL_CLIENT_ID",
+    "SMARTAPI_CLIENT_ID",
+    "ANGEL_CLIENT_CODE",
+    "ANGEL_CLIENTID",
+    "ANGEL_USER_ID",
+    "ANGEL_USERID",
+)
+ANGEL_MPIN = _env_first_non_empty(
+    "ANGEL_MPIN",
+    "ANGEL_CLIENT_PIN",
+    "SMARTAPI_MPIN",
+    "ANGEL_PIN",
+)
+ANGEL_TOTP_SECRET = _env_first_non_empty(
+    "ANGEL_TOTP_SECRET",
+    "SMARTAPI_TOTP_SECRET",
+    "ANGEL_TOTP",
+    "ANGEL_TOTP_KEY",
+    "ANGEL_OTP_SECRET",
+)
 
 
 # ---------------------------------------------------------------------------

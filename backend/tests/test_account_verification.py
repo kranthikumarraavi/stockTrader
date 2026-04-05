@@ -37,3 +37,21 @@ def test_account_verification_paper_mode_with_aliases(monkeypatch):
     assert res["client_id"] == "demo_client"
     assert res["balance"] == 250000.0
     assert all(res["credentials_set"].values())
+
+
+def test_account_verification_accepts_alt_aliases(monkeypatch):
+    monkeypatch.delenv("ANGEL_API_KEY", raising=False)
+    monkeypatch.delenv("ANGEL_CLIENT_ID", raising=False)
+    monkeypatch.delenv("ANGEL_MPIN", raising=False)
+    monkeypatch.delenv("ANGEL_TOTP_SECRET", raising=False)
+
+    monkeypatch.setenv("ANGEL_ONE_API_KEY", "alt_api")
+    monkeypatch.setenv("ANGEL_USER_ID", "alt_user")
+    monkeypatch.setenv("ANGEL_PIN", "9999")
+    monkeypatch.setenv("ANGEL_OTP_SECRET", "alt_totp")
+    monkeypatch.setenv("PAPER_MODE", "true")
+
+    res = get_angel_profile_sync()
+    assert res["status"] == "paper_mode"
+    assert res["client_id"] == "alt_user"
+    assert all(res["credentials_set"].values())
