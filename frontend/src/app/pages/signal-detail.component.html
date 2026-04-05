@@ -1,0 +1,130 @@
+<div class="sd">
+  <header class="sd__header">
+    <div>
+      <h1 class="sd__title"><i class="bi bi-bullseye"></i> Options Signal</h1>
+      <p class="sd__subtitle text-muted">Fetch model output and track live price movement</p>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary" [routerLink]="['/signals']">
+      <i class="bi bi-arrow-left"></i>
+      Back to Predictions
+    </a>
+  </header>
+
+  <section class="card sd__section">
+    <h2 class="sd__section-title"><i class="bi bi-sliders"></i> Option Parameters</h2>
+    <div class="sd__form-grid">
+      <div>
+        <label class="form-label">Underlying</label>
+        <input class="form-control" [(ngModel)]="underlying" placeholder="NIFTY" />
+      </div>
+      <div>
+        <label class="form-label">Strike</label>
+        <input class="form-control" type="number" [(ngModel)]="strike" />
+      </div>
+      <div>
+        <label class="form-label">Expiry</label>
+        <input class="form-control" type="date" [(ngModel)]="expiry" />
+      </div>
+      <div>
+        <label class="form-label">Type</label>
+        <select class="form-select" [(ngModel)]="optionType">
+          <option value="CE">CE (Call)</option>
+          <option value="PE">PE (Put)</option>
+        </select>
+      </div>
+      <div class="sd__form-action">
+        <button class="btn btn-primary" (click)="fetchSignal()" [disabled]="loading">
+          {{ loading ? 'Fetching...' : 'Get Signal' }}
+        </button>
+      </div>
+    </div>
+    <p *ngIf="error" class="sd__error">{{ error }}</p>
+  </section>
+
+  <div *ngIf="signal" class="sd__grid-2">
+    <section class="card sd__section">
+      <h2 class="sd__section-title"><i class="bi bi-lightning-charge"></i> Signal Summary</h2>
+      <table class="table align-middle mb-0">
+        <tbody>
+          <tr>
+            <td><strong>Action</strong></td>
+            <td>
+              <span class="sd__badge" [ngClass]="actionClass(signal.action)">
+                {{ signal.action | uppercase }}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Confidence</strong></td>
+            <td class="text-mono">{{ (signal.confidence * 100) | number:'1.1-1' }}%</td>
+          </tr>
+          <tr>
+            <td><strong>Expected Return</strong></td>
+            <td class="text-mono" [class.text-buy]="signal.expected_return >= 0" [class.text-sell]="signal.expected_return < 0">
+              {{ signal.expected_return >= 0 ? '+' : '' }}{{ (signal.expected_return * 100) | number:'1.2-2' }}%
+            </td>
+          </tr>
+          <tr>
+            <td><strong>IV Percentile</strong></td>
+            <td class="text-mono">{{ signal.iv_percentile != null ? ((signal.iv_percentile * 100) | number:'1.1-1') + '%' : 'N/A' }}</td>
+          </tr>
+          <tr>
+            <td><strong>Model</strong></td>
+            <td class="text-mono text-sm">{{ signal.model_version }}</td>
+          </tr>
+          <tr>
+            <td><strong>Calibration</strong></td>
+            <td class="text-mono">{{ signal.calibration_score !== undefined ? (signal.calibration_score | number:'1.3-3') : 'N/A' }}</td>
+          </tr>
+          <tr>
+            <td><strong>SHAP Features</strong></td>
+            <td class="text-muted text-sm">{{ signal.shap_top_features ? signal.shap_top_features.join(', ') : 'N/A' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card sd__section">
+      <h2 class="sd__section-title"><i class="bi bi-activity"></i> Greeks</h2>
+      <div class="sd__greeks-grid">
+        <article class="sd__greek-cell">
+          <span class="stat-label">Delta</span>
+          <span class="stat-value">{{ signal.greeks.delta | number:'1.4-4' }}</span>
+        </article>
+        <article class="sd__greek-cell">
+          <span class="stat-label">Gamma</span>
+          <span class="stat-value">{{ signal.greeks.gamma | number:'1.4-4' }}</span>
+        </article>
+        <article class="sd__greek-cell">
+          <span class="stat-label">Theta</span>
+          <span class="stat-value">{{ signal.greeks.theta | number:'1.4-4' }}</span>
+        </article>
+        <article class="sd__greek-cell">
+          <span class="stat-label">Vega</span>
+          <span class="stat-value">{{ signal.greeks.vega | number:'1.4-4' }}</span>
+        </article>
+        <article class="sd__greek-cell">
+          <span class="stat-label">Rho</span>
+          <span class="stat-value">{{ signal.greeks.rho != null ? (signal.greeks.rho | number:'1.4-4') : 'N/A' }}</span>
+        </article>
+        <article class="sd__greek-cell">
+          <span class="stat-label">IV</span>
+          <span class="stat-value">{{ signal.greeks.iv != null ? ((signal.greeks.iv * 100) | number:'1.1-1') + '%' : 'N/A' }}</span>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <section class="card sd__section">
+    <div class="sd__section-header">
+      <h2 class="sd__section-title"><i class="bi bi-graph-up-arrow"></i> Live Chart: {{ underlying }}</h2>
+      <div class="sd__chart-actions">
+        <button class="btn btn-primary btn-sm" (click)="startStream()" [disabled]="!!streamSub">
+          {{ streamSub ? 'Connected' : 'Connect Live Feed' }}
+        </button>
+        <button class="btn btn-outline-danger btn-sm" *ngIf="streamSub" (click)="stopStream()">Disconnect</button>
+      </div>
+    </div>
+    <app-live-price-chart [data]="ticks" />
+  </section>
+</div>

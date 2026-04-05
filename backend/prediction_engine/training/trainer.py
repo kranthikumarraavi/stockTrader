@@ -9,10 +9,13 @@ Usage
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -38,11 +41,71 @@ SEED = 42
 PURGE_GAP = 10  # days gap between splits to prevent look-ahead leakage
 
 
+class TrainingPipelineError(RuntimeError):
+    """Structured training error returned by admin retrain endpoint."""
+
+    def __init__(self, reason: str, message: str, details: dict | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.details = details or {}
+
+    def to_dict(self) -> dict:
+        return {
+            "status": "failed",
+            "reason": self.reason,
+            "message": str(self),
+            "details": self.details,
+        }
+
+
+@dataclass(frozen=True)
+class TrainingConfig:
+    """Configurable minimums for safe time-series training."""
+
+    train_min_days: int = 120
+    val_min_days: int = 30
+    test_min_days: int = 30
+    purge_gap_days: int = PURGE_GAP
+    min_unique_dates: int = 120
+    min_rows_per_symbol: int = 140
+    min_symbols: int = 3
+    min_samples_per_class: int = 40
+    allow_reduced_validation: bool = False
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def load_training_config() -> TrainingConfig:
+    """Load training thresholds from environment variables."""
+
+    return TrainingConfig(
+        train_min_days=int(os.getenv("TRAIN_MIN_DAYS", "120")),
+        val_min_days=int(os.getenv("VAL_MIN_DAYS", "30")),
+        test_min_days=int(os.getenv("TEST_MIN_DAYS", "30")),
+        purge_gap_days=int(os.getenv("TRAIN_EMBARGO_DAYS", str(PURGE_GAP))),
+        min_unique_dates=int(os.getenv("MIN_UNIQUE_DATES", "120")),
+        min_rows_per_symbol=int(os.getenv("MIN_ROWS_PER_SYMBOL", "140")),
+        min_symbols=int(os.getenv("MIN_SYMBOLS_FOR_TRAINING", "3")),
+        min_samples_per_class=int(os.getenv("MIN_SAMPLES_PER_CLASS", "40")),
+        allow_reduced_validation=_env_bool("TRAIN_ALLOW_REDUCED_VALIDATION", False),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Auto-download data if missing
 # ---------------------------------------------------------------------------
 
-def _ensure_data_available(tickers: list[str], data_dir: Path) -> list[str]:
+def _ensure_data_available(
+    tickers: list[str],
+    data_dir: Path,
+    *,
+    return_report: bool = False,
+) -> list[str] | tuple[list[str], dict]:
     """Check if CSV data exists for tickers; download missing ones via yfinance.
 
     Returns the list of tickers that have data available.
@@ -51,7 +114,17 @@ def _ensure_data_available(tickers: list[str], data_dir: Path) -> list[str]:
     existing = {p.stem for p in data_dir.glob("*.csv")}
     missing = list(dict.fromkeys(t for t in tickers if t not in existing))
 
+    report: dict[str, object] = {
+        "requested": len(tickers),
+        "missing": missing,
+        "downloaded": [],
+        "skipped": {},
+    }
+
     if not missing:
+        if return_report:
+            report["available"] = tickers
+            return tickers, report
         return tickers
 
     logger.info("Downloading data for %d missing tickers...", len(missing))
@@ -72,10 +145,12 @@ def _ensure_data_available(tickers: list[str], data_dir: Path) -> list[str]:
                     if len(df) >= 50:
                         downloaded += 1
                         success = True
+                        report["downloaded"].append(ticker)
                         logger.info("Downloaded %s (%d rows)", ticker, len(df))
                         break
 
                     logger.warning("Skipping %s - only %d rows", ticker, len(df))
+                    report["skipped"][ticker] = f"insufficient_rows:{len(df)}"
                     path.unlink(missing_ok=True)
                 except Exception as exc:
                     logger.warning(
@@ -84,6 +159,7 @@ def _ensure_data_available(tickers: list[str], data_dir: Path) -> list[str]:
                         attempt,
                         exc,
                     )
+                    report["skipped"][ticker] = str(exc)
 
                 if attempt < 3:
                     backoff_s = 1.5 * attempt
@@ -92,6 +168,7 @@ def _ensure_data_available(tickers: list[str], data_dir: Path) -> list[str]:
 
             if not success:
                 logger.warning("Unable to fetch usable data for %s after retries", ticker)
+                report["skipped"].setdefault(ticker, "retry_exhausted")
 
             # Pace requests to reduce provider-side throttling.
             time.sleep(0.4)
@@ -99,10 +176,16 @@ def _ensure_data_available(tickers: list[str], data_dir: Path) -> list[str]:
         logger.info("Downloaded %d/%d missing tickers", downloaded, len(missing))
     except ImportError:
         logger.error("yfinance not installed - cannot auto-download data")
+        for ticker in missing:
+            report["skipped"].setdefault(ticker, "yfinance_not_installed")
 
     # Return only tickers that have CSV files
     available = {p.stem for p in data_dir.glob("*.csv")}
-    return [t for t in tickers if t in available]
+    available_tickers = [t for t in tickers if t in available]
+    report["available"] = available_tickers
+    if return_report:
+        return available_tickers, report
+    return available_tickers
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +257,7 @@ def _walk_forward_split(
     train_pct: float = 0.6,
     val_pct: float = 0.2,
     purge_gap: int = PURGE_GAP,
+    config: TrainingConfig | None = None,
 ):
     """Time-series aware train / val / test split with purge gaps.
 
@@ -182,7 +266,11 @@ def _walk_forward_split(
     Purge gaps are applied in units of trading dates.
     """
     if df.empty:
-        raise ValueError("Cannot split empty dataframe.")
+        raise TrainingPipelineError(
+            reason="insufficient_data",
+            message="Cannot split empty dataframe.",
+            details={"rows": 0},
+        )
 
     work = df.copy()
     work["date"] = pd.to_datetime(work["date"])
@@ -191,33 +279,121 @@ def _walk_forward_split(
 
     unique_dates = pd.Index(work["date"].dropna().sort_values().unique())
     n_dates = len(unique_dates)
-    if n_dates < 30:
-        raise ValueError(f"Not enough unique dates to split safely (got {n_dates}).")
 
-    train_end_idx = max(0, int(n_dates * train_pct) - 1)
-    val_start_idx = train_end_idx + 1 + purge_gap
-    val_end_idx = max(val_start_idx, int(n_dates * (train_pct + val_pct)) - 1)
-    test_start_idx = val_end_idx + 1 + purge_gap
+    cfg = config or load_training_config()
+    purge = int(cfg.purge_gap_days if config else purge_gap)
+    required_min = max(
+        cfg.min_unique_dates if config else 30,
+        (cfg.train_min_days + cfg.val_min_days + cfg.test_min_days + 2 * purge)
+        if config
+        else 0,
+    )
+    if n_dates < required_min:
+        if config and cfg.allow_reduced_validation:
+            # Reduced mode keeps chronology and purge gaps but scales windows.
+            test_days = max(10, int(n_dates * 0.15))
+            val_days = max(10, int(n_dates * 0.15))
+            train_days = max(20, n_dates - test_days - val_days - 2 * purge)
+            temp_cfg = TrainingConfig(
+                train_min_days=train_days,
+                val_min_days=val_days,
+                test_min_days=test_days,
+                purge_gap_days=purge,
+                min_unique_dates=max(40, train_days + val_days + test_days),
+                min_rows_per_symbol=cfg.min_rows_per_symbol,
+                min_symbols=cfg.min_symbols,
+                min_samples_per_class=cfg.min_samples_per_class,
+                allow_reduced_validation=False,
+            )
+            logger.warning(
+                "Using reduced validation mode due limited data: n_dates=%d, train=%d, val=%d, test=%d",
+                n_dates,
+                train_days,
+                val_days,
+                test_days,
+            )
+            return _walk_forward_split(
+                work,
+                train_pct=train_pct,
+                val_pct=val_pct,
+                purge_gap=purge,
+                config=temp_cfg,
+            )
 
-    if val_start_idx >= n_dates or test_start_idx >= n_dates:
-        raise ValueError(
-            "Split configuration leaves no room for validation/test. "
-            f"n_dates={n_dates}, train_pct={train_pct}, val_pct={val_pct}, purge_gap={purge_gap}"
+        raise TrainingPipelineError(
+            reason="insufficient_data",
+            message=f"Not enough unique dates to split safely (got {n_dates}).",
+            details={
+                "unique_dates": n_dates,
+                "required_min_dates": required_min,
+                "train_min_days": cfg.train_min_days,
+                "val_min_days": cfg.val_min_days,
+                "test_min_days": cfg.test_min_days,
+                "purge_gap_days": purge,
+            },
         )
 
+    if config:
+        # Allocate from right to preserve recent validation/test while keeping chronology.
+        test_start_idx = n_dates - cfg.test_min_days
+        val_end_idx = test_start_idx - purge - 1
+        val_start_idx = val_end_idx - cfg.val_min_days + 1
+        train_end_idx = val_start_idx - purge - 1
+
+        if train_end_idx + 1 < cfg.train_min_days:
+            raise TrainingPipelineError(
+                reason="insufficient_data",
+                message="Not enough dates for configured train/val/test windows.",
+                details={
+                    "unique_dates": n_dates,
+                    "train_days_available": max(0, train_end_idx + 1),
+                    "train_min_days": cfg.train_min_days,
+                    "val_min_days": cfg.val_min_days,
+                    "test_min_days": cfg.test_min_days,
+                    "purge_gap_days": purge,
+                },
+            )
+        train_start_idx = 0
+    else:
+        train_start_idx = 0
+        train_end_idx = max(0, int(n_dates * train_pct) - 1)
+        val_start_idx = train_end_idx + 1 + purge
+        val_end_idx = max(val_start_idx, int(n_dates * (train_pct + val_pct)) - 1)
+        test_start_idx = val_end_idx + 1 + purge
+        if val_start_idx >= n_dates or test_start_idx >= n_dates:
+            raise TrainingPipelineError(
+                reason="invalid_split",
+                message="Split configuration leaves no room for validation/test.",
+                details={
+                    "n_dates": n_dates,
+                    "train_pct": train_pct,
+                    "val_pct": val_pct,
+                    "purge_gap": purge,
+                },
+            )
+
+    train_start_date = unique_dates[train_start_idx]
     train_end_date = unique_dates[train_end_idx]
     val_start_date = unique_dates[val_start_idx]
     val_end_date = unique_dates[val_end_idx]
     test_start_date = unique_dates[test_start_idx]
 
-    train_df = work[work["date"] <= train_end_date]
+    train_df = work[(work["date"] >= train_start_date) & (work["date"] <= train_end_date)]
     val_df = work[(work["date"] >= val_start_date) & (work["date"] <= val_end_date)]
     test_df = work[work["date"] >= test_start_date]
 
     if train_df.empty or val_df.empty or test_df.empty:
-        raise ValueError(
-            "One or more split datasets are empty "
-            f"(train={len(train_df)}, val={len(val_df)}, test={len(test_df)})."
+        raise TrainingPipelineError(
+            reason="invalid_split",
+            message="One or more split datasets are empty.",
+            details={
+                "train_rows": len(train_df),
+                "val_rows": len(val_df),
+                "test_rows": len(test_df),
+                "train_range": [str(train_start_date), str(train_end_date)],
+                "val_range": [str(val_start_date), str(val_end_date)],
+                "test_start": str(test_start_date),
+            },
         )
 
     return train_df.reset_index(drop=True), val_df.reset_index(drop=True), test_df.reset_index(drop=True)
@@ -248,6 +424,100 @@ NUMERIC_FEATURES = [
 ]
 
 
+def _schema_hash(columns: list[str]) -> str:
+    payload = "|".join(columns).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _date_range_meta(df: pd.DataFrame) -> dict[str, str | None]:
+    if df.empty:
+        return {"start": None, "end": None}
+    dates = pd.to_datetime(df["date"])
+    return {
+        "start": str(dates.min().date()),
+        "end": str(dates.max().date()),
+    }
+
+
+def _validate_training_dataset(
+    features: pd.DataFrame,
+    cfg: TrainingConfig,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    """Validate and filter training feature matrix before splitting."""
+
+    if features.empty:
+        raise TrainingPipelineError(
+            reason="insufficient_data",
+            message="Feature matrix is empty after preprocessing.",
+            details={"rows": 0},
+        )
+
+    work = features.copy()
+    work["date"] = pd.to_datetime(work["date"])
+    work = work.sort_values(["ticker", "date"]).reset_index(drop=True)
+
+    counts = work.groupby("ticker").size().sort_values(ascending=False)
+    skipped = {
+        symbol: int(rows)
+        for symbol, rows in counts.items()
+        if int(rows) < cfg.min_rows_per_symbol
+    }
+    eligible = [symbol for symbol, rows in counts.items() if int(rows) >= cfg.min_rows_per_symbol]
+
+    if skipped:
+        logger.warning("Skipping %d symbols with insufficient rows: %s", len(skipped), skipped)
+        work = work[work["ticker"].isin(eligible)].reset_index(drop=True)
+
+    if len(eligible) < cfg.min_symbols:
+        raise TrainingPipelineError(
+            reason="insufficient_data",
+            message="Not enough symbols with usable history for training.",
+            details={
+                "eligible_symbols": len(eligible),
+                "required_min_symbols": cfg.min_symbols,
+                "symbols_skipped": sorted(skipped.keys()),
+            },
+        )
+
+    unique_dates = int(work["date"].nunique())
+    if unique_dates < cfg.min_unique_dates:
+        raise TrainingPipelineError(
+            reason="insufficient_data",
+            message=f"Not enough unique dates to train safely (got {unique_dates}).",
+            details={
+                "unique_dates": unique_dates,
+                "required_min_dates": cfg.min_unique_dates,
+                "symbols_used": sorted(eligible),
+                "symbols_skipped": sorted(skipped.keys()),
+            },
+        )
+
+    class_counts = work["label"].value_counts().to_dict()
+    low_class = [
+        {"class": int(k), "count": int(v)}
+        for k, v in class_counts.items()
+        if int(v) < cfg.min_samples_per_class
+    ]
+    if len(class_counts) < 2 or low_class:
+        raise TrainingPipelineError(
+            reason="insufficient_data",
+            message="Class coverage is insufficient for robust training.",
+            details={
+                "class_counts": {str(k): int(v) for k, v in class_counts.items()},
+                "min_samples_per_class": cfg.min_samples_per_class,
+                "low_classes": low_class,
+            },
+        )
+
+    return work, {
+        "symbols_used": sorted(eligible),
+        "symbols_skipped": sorted(skipped.keys()),
+        "unique_dates": unique_dates,
+        "rows": int(len(work)),
+        "class_counts": {str(k): int(v) for k, v in class_counts.items()},
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main training routine
 # ---------------------------------------------------------------------------
@@ -267,6 +537,7 @@ def train(
     """
     np.random.seed(seed)
     data_dir = Path(data_dir)
+    cfg = load_training_config()
 
     if tickers is None:
         ticker_file = REPO_ROOT / "scripts" / "sample_data" / "tickers.txt"
@@ -275,35 +546,67 @@ def train(
         ]
 
     # Auto-download data if missing
-    tickers = _ensure_data_available(tickers, data_dir)
+    tickers, data_report = _ensure_data_available(tickers, data_dir, return_report=True)
     if not tickers:
-        raise FileNotFoundError(
-            "No CSV data available. Ensure yfinance is installed and "
-            "run: python scripts/sample_data/download_sample.py"
+        raise TrainingPipelineError(
+            reason="insufficient_data",
+            message="No CSV data available for retraining.",
+            details={
+                "requested_tickers": data_report.get("requested", 0),
+                "available_tickers": 0,
+                "symbols_skipped": sorted((data_report.get("skipped") or {}).keys()),
+            },
         )
 
-    logger.info("Building features for %d tickers â€¦", len(tickers))
-    features = build_features(tickers, data_dir=data_dir)
+    logger.info("Building features for %d tickers...", len(tickers))
+    try:
+        features = build_features(tickers, data_dir=data_dir)
+    except Exception as exc:
+        raise TrainingPipelineError(
+            reason="feature_build_failed",
+            message="Failed to build features from available market data.",
+            details={
+                "error": str(exc),
+                "tickers_considered": tickers,
+            },
+        ) from exc
 
     # Add labels
     features = features.copy()
+    features["date"] = pd.to_datetime(features["date"])
+    features = features.sort_values(["ticker", "date"]).reset_index(drop=True)
     features["label"] = _build_labels(features, horizon=horizon)
     features_with_tail = features.copy()
 
     features = features.dropna(subset=["label"]).reset_index(drop=True)
+    if features.empty:
+        raise TrainingPipelineError(
+            reason="insufficient_data",
+            message="No labeled rows available after applying prediction horizon.",
+            details={
+                "horizon": horizon,
+                "symbols_skipped": sorted((data_report.get("skipped") or {}).keys()),
+            },
+        )
     features["label"] = features["label"].astype(int)
 
     # Normalize features per-ticker to remove scale effects
     features = _normalize_features_per_ticker(features, NUMERIC_FEATURES)
     features = features.dropna(subset=NUMERIC_FEATURES).reset_index(drop=True)
 
+    # Validate and filter dataset quality
+    features, quality_meta = _validate_training_dataset(features, cfg)
+
     # Log class distribution
     class_dist = features["label"].value_counts().sort_index()
-    logger.info("Label distribution: down=%d, up=%d",
-                class_dist.get(0, 0), class_dist.get(1, 0))
+    logger.info(
+        "Label distribution: down=%d, up=%d",
+        class_dist.get(0, 0),
+        class_dist.get(1, 0),
+    )
 
-    # Split
-    train_df, val_df, test_df = _walk_forward_split(features)
+    # Split (strict time-based walk-forward)
+    train_df, val_df, test_df = _walk_forward_split(features, config=cfg)
 
     X_train = train_df[NUMERIC_FEATURES]
     y_train = train_df["label"]
@@ -342,14 +645,23 @@ def train(
         logger.info("Leakage checks passed for train/val/test splits.")
     except Exception as exc:
         logger.error("Leakage check failed: %s", exc)
-        raise
+        raise TrainingPipelineError(
+            reason="leakage_detected",
+            message=str(exc),
+            details={
+                "horizon": horizon,
+                "train_range": _date_range_meta(train_df),
+                "val_range": _date_range_meta(val_df),
+                "test_range": _date_range_meta(test_df),
+            },
+        ) from exc
 
     # Compute class weights to handle imbalanced labels
     sample_weights = _compute_class_weights(y_train)
 
     # Train
     model = LightGBMModel(seed=seed)
-    logger.info("Training LightGBM binary (train=%d, val=%d) â€¦", len(X_train), len(X_val))
+    logger.info("Training LightGBM binary (train=%d, val=%d) ...", len(X_train), len(X_val))
     metrics = model.train(
         X_train, y_train,
         val_X=X_val, val_y=y_val,
@@ -392,6 +704,8 @@ def train(
     logger.info("Model saved â†’ %s", artifact_path)
 
     # Update registry
+    skipped_from_download = sorted((data_report.get("skipped") or {}).keys())
+    skipped_from_filter = [s for s in quality_meta.get("symbols_skipped", []) if s not in skipped_from_download]
     entry = {
         "version": version,
         "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
@@ -399,7 +713,19 @@ def train(
         "horizon": horizon,
         "metrics": metrics,
         "artifact_path": str(artifact_path.relative_to(REPO_ROOT)),
-        "tickers_count": len(tickers),
+        "tickers_count": len(quality_meta.get("symbols_used", [])),
+        "feature_schema_hash": _schema_hash(NUMERIC_FEATURES),
+        "train_range": _date_range_meta(train_df),
+        "val_range": _date_range_meta(val_df),
+        "test_range": _date_range_meta(test_df),
+        "symbols_used": quality_meta.get("symbols_used", []),
+        "symbols_skipped": sorted(set(skipped_from_download + skipped_from_filter)),
+        "data_quality": {
+            "unique_dates": quality_meta.get("unique_dates"),
+            "rows": quality_meta.get("rows"),
+            "class_counts": quality_meta.get("class_counts"),
+            "download_report": data_report,
+        },
     }
     _update_registry(entry)
     return entry

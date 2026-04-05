@@ -1,0 +1,123 @@
+<div class="rp">
+  <header class="rp__header">
+    <div>
+      <h1 class="rp__title"><i class="bi bi-activity"></i> Market Regime Intelligence</h1>
+      <p class="rp__subtitle text-muted">Regime heatmap, detection, and strategy decision insights</p>
+    </div>
+  </header>
+
+  <section class="card rp__section">
+    <div class="rp__section-header">
+      <h2 class="rp__section-title"><i class="bi bi-grid-3x3-gap-fill"></i> Regime Heatmap</h2>
+      <button class="btn btn-sm btn-outline-secondary" (click)="loadHeatmap()" [disabled]="heatmapLoading">
+        <i class="bi bi-arrow-clockwise"></i>
+        {{ heatmapLoading ? 'Loading...' : 'Refresh' }}
+      </button>
+    </div>
+
+    <div class="rp__filters">
+      <label class="form-label">Symbols</label>
+      <input class="form-control" [(ngModel)]="symbolsStr" placeholder="RELIANCE, TCS, INFY, HDFCBANK (comma-separated)" />
+    </div>
+
+    <div *ngIf="!heatmap" class="text-muted text-sm">Enter symbols and click Refresh.</div>
+
+    <div *ngIf="heatmap" class="rp__heatmap-grid">
+      <article *ngFor="let item of heatmapEntries; trackBy: trackByHeatmap"
+               class="rp__heatmap-card"
+               [ngClass]="normalizeRegime(item.regime)">
+        <div class="rp__symbol">{{ item.symbol }}</div>
+        <div class="rp__regime">{{ formatLabel(item.regime) }}</div>
+        <div class="rp__confidence">{{ item.confidence | number:'1.0-0' }}% confidence</div>
+        <div class="rp__volatility">Volatility: {{ item.volatility | number:'1.4-4' }}</div>
+      </article>
+    </div>
+  </section>
+
+  <section class="card rp__section">
+    <div class="rp__section-header">
+      <h2 class="rp__section-title"><i class="bi bi-search"></i> Regime Detail</h2>
+    </div>
+
+    <div class="rp__detail-input">
+      <input class="form-control" [(ngModel)]="detailSymbol" placeholder="e.g. RELIANCE" />
+      <button class="btn btn-primary" (click)="detectRegime()" [disabled]="detailLoading || !detailSymbol.trim()">
+        {{ detailLoading ? 'Detecting...' : 'Detect' }}
+      </button>
+    </div>
+
+    <div *ngIf="regimeDetail" class="rp__detail">
+      <div class="rp__detail-header">
+        <span class="rp__badge" [ngClass]="normalizeRegime(regimeDetail.regime)">
+          {{ formatLabel(regimeDetail.regime) }}
+        </span>
+        <span class="text-muted">{{ regimeDetail.confidence | number:'1.0-0' }}% confidence</span>
+      </div>
+
+      <div class="rp__stats-grid">
+        <article class="rp__stat-card">
+          <div class="stat-label">Volatility</div>
+          <div class="stat-value">{{ regimeDetail.volatility | number:'1.4-4' }}</div>
+        </article>
+        <article class="rp__stat-card">
+          <div class="stat-label">Trend</div>
+          <div class="stat-value">{{ regimeDetail.trend | number:'1.4-4' }}</div>
+        </article>
+        <article *ngFor="let ind of indicatorEntries; trackBy: trackByStat" class="rp__stat-card">
+          <div class="stat-label">{{ formatLabel(ind.key) }}</div>
+          <div class="stat-value">{{ ind.value | number:'1.4-4' }}</div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="card rp__section">
+    <div class="rp__section-header">
+      <h2 class="rp__section-title"><i class="bi bi-list-ul"></i> Recent Strategy Decisions</h2>
+      <button class="btn btn-sm btn-outline-secondary" (click)="loadDecisions()">
+        <i class="bi bi-arrow-clockwise"></i>
+        Refresh
+      </button>
+    </div>
+
+    <div *ngIf="!decisions" class="text-muted text-sm">Loading decisions...</div>
+    <div *ngIf="decisions?.length === 0" class="text-muted text-sm">No decisions yet.</div>
+
+    <div class="table-responsive" *ngIf="decisions?.length">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Strategy</th>
+            <th>Confidence</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let d of decisions; trackBy: trackByDecision">
+            <td><strong>{{ d.ticker }}</strong></td>
+            <td>
+              <span class="rp__strategy">{{ d.strategy }}</span>
+            </td>
+            <td class="text-mono">{{ d.confidence | number:'1.0-0' }}%</td>
+            <td class="text-muted text-sm">{{ d.reason }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card rp__section">
+    <div class="rp__section-header">
+      <h2 class="rp__section-title"><i class="bi bi-bar-chart-line-fill"></i> Strategy Statistics</h2>
+    </div>
+
+    <div *ngIf="!stats" class="text-muted text-sm">Loading strategy statistics...</div>
+    <div *ngIf="stats" class="rp__stats-grid">
+      <article *ngFor="let s of statsEntries; trackBy: trackByStat" class="rp__stat-card">
+        <div class="stat-label">{{ formatLabel(s.key) }}</div>
+        <div class="stat-value">{{ s.value }}</div>
+      </article>
+    </div>
+  </section>
+</div>

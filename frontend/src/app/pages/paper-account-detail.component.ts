@@ -13,54 +13,8 @@ import { OrderIntentFormComponent, OrderIntentData } from '../components/order-i
   selector: 'app-paper-account-detail',
   standalone: true,
   imports: [CommonModule, FormsModule, EquityChartComponent, SimulationSummaryCardComponent, OrderIntentFormComponent],
-  template: `
-    <div class="page" *ngIf="accountId">
-      <div class="flex justify-between items-center mb-2">
-        <h1>Paper Account</h1>
-        <span class="badge">{{ accountId }}</span>
-      </div>
-
-      <app-simulation-summary-card [accountId]="accountId" />
-
-      <div class="card mt-2">
-        <h2>Equity Curve</h2>
-        <app-equity-chart [data]="equity" />
-      </div>
-
-      <div class="card mt-2">
-        <h2>Replay Simulation</h2>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Date</label>
-            <input type="date" [(ngModel)]="replayDate" />
-          </div>
-          <div class="form-group">
-            <label>Speed (1-100x)</label>
-            <input type="number" [(ngModel)]="replaySpeed" min="1" max="100" />
-          </div>
-          <div class="form-group" style="justify-content:flex-end">
-            <button class="btn-primary" (click)="runReplay()" [disabled]="replaying">
-              {{ replaying ? 'Running...' : 'Run Replay' }}
-            </button>
-          </div>
-        </div>
-        <pre *ngIf="replayResult" class="replay-result">{{ replayResult | json }}</pre>
-      </div>
-
-      <div class="card mt-2">
-        <h2>Submit Order Intent</h2>
-        <app-order-intent-form (intentSubmit)="submitOrder($event)" />
-      </div>
-    </div>
-    <div *ngIf="!accountId" class="page">
-      <div class="card" style="text-align:center; padding: 3rem;">
-        <p class="text-muted">No account selected. Go back to the dashboard.</p>
-      </div>
-    </div>
-  `,
-  styles: [`
-    .replay-result { background: var(--color-bg); padding: 1rem; margin-top: 1rem; border-radius: var(--radius); font-size: 0.85rem; overflow-x: auto; border: 1px solid var(--color-border); }
-  `]
+  templateUrl: './paper-account-detail.component.html',
+  styleUrl: './paper-account-detail.component.scss',
 })
 export class PaperAccountDetailComponent implements OnInit {
   accountId: string | null = null;

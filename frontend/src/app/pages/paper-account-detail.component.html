@@ -1,0 +1,49 @@
+<div class="pad" *ngIf="accountId">
+  <header class="pad__header">
+    <div>
+      <h1 class="pad__title"><i class="bi bi-journal-text"></i> Paper Account</h1>
+      <p class="pad__subtitle text-muted">Account replay, equity curve, and manual intent execution</p>
+    </div>
+    <span class="pad__account-id">{{ accountId }}</span>
+  </header>
+
+  <app-simulation-summary-card [accountId]="accountId" />
+
+  <section class="card pad__section">
+    <h2 class="pad__section-title"><i class="bi bi-graph-up"></i> Equity Curve</h2>
+    <app-equity-chart [data]="equity" />
+  </section>
+
+  <section class="card pad__section">
+    <h2 class="pad__section-title"><i class="bi bi-play-circle"></i> Replay Simulation</h2>
+    <div class="pad__replay-form">
+      <div>
+        <label class="form-label">Date</label>
+        <input class="form-control" type="date" [(ngModel)]="replayDate" />
+      </div>
+      <div>
+        <label class="form-label">Speed (1-100x)</label>
+        <input class="form-control" type="number" [(ngModel)]="replaySpeed" min="1" max="100" />
+      </div>
+      <div class="pad__replay-action">
+        <button class="btn btn-primary" (click)="runReplay()" [disabled]="replaying">
+          {{ replaying ? 'Running...' : 'Run Replay' }}
+        </button>
+      </div>
+    </div>
+
+    <pre *ngIf="replayResult" class="pad__replay-result">{{ replayResult | json }}</pre>
+  </section>
+
+  <section class="card pad__section">
+    <h2 class="pad__section-title"><i class="bi bi-send"></i> Submit Order Intent</h2>
+    <app-order-intent-form (intentSubmit)="submitOrder($event)" />
+  </section>
+</div>
+
+<div *ngIf="!accountId" class="pad pad--empty">
+  <article class="card pad__empty-card">
+    <h2 class="pad__empty-title">No account selected</h2>
+    <p class="text-muted mb-0">Open a paper account from dashboard to view details.</p>
+  </article>
+</div>

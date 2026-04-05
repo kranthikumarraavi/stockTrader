@@ -6,10 +6,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from backend.services.model_manager import ModelManager
 from backend.services.model_registry import ModelRegistry
@@ -29,7 +30,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["admin"])
 
 # Track retrain state so the frontend can poll progress
-_retrain_status: dict = {"running": False, "progress": None, "error": None}
+_retrain_status: dict = {
+    "running": False,
+    "progress": None,
+    "error": None,
+    "reason": None,
+    "details": None,
+    "correlation_id": None,
+}
 _retrain_lock = threading.Lock()
 
 
@@ -50,6 +58,22 @@ def _run_train_sync() -> dict:
     return train()
 
 
+def _failure_payload(
+    *,
+    correlation_id: str,
+    reason: str,
+    message: str,
+    details: dict | None = None,
+) -> dict:
+    return {
+        "status": "failed",
+        "reason": reason,
+        "message": message,
+        "correlation_id": correlation_id,
+        "details": details or {},
+    }
+
+
 @router.get("/retrain/status")
 async def retrain_status():
     """Poll retrain progress without blocking."""
@@ -64,13 +88,25 @@ async def retrain():
     Training runs in a background thread so the event loop stays responsive
     for live-chart, bot, and other endpoints.
     """
+    correlation_id = str(uuid.uuid4())
     with _retrain_lock:
         if _retrain_status["running"]:
-            return {"message": "Retrain already in progress", "status": "running"}
-        _retrain_status.update(running=True, progress="training", error=None)
+            return {
+                "status": "running",
+                "message": "Retrain already in progress",
+                "correlation_id": _retrain_status.get("correlation_id") or correlation_id,
+            }
+        _retrain_status.update(
+            running=True,
+            progress="training",
+            error=None,
+            reason=None,
+            details=None,
+            correlation_id=correlation_id,
+        )
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         entry = await loop.run_in_executor(None, _run_train_sync)
 
         # Log to MLflow (non-critical)
@@ -91,22 +127,67 @@ async def retrain():
 
         record_retrain("success")
         with _retrain_lock:
-            _retrain_status.update(running=False, progress="done", error=None)
+            _retrain_status.update(
+                running=False,
+                progress="done",
+                error=None,
+                reason=None,
+                details=None,
+                correlation_id=correlation_id,
+            )
 
         return {
+            "status": "success",
             "message": "Retrain completed",
             "model_version": entry["version"],
             "metrics": entry["metrics"],
+            "correlation_id": correlation_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as exc:
-        logger.exception("Retrain failed")
+        from backend.prediction_engine.training.trainer import TrainingPipelineError
+        if isinstance(exc, TrainingPipelineError):
+            logger.warning("[cid=%s] Retrain rejected: %s", correlation_id, exc)
+            record_retrain("failed")
+            with _retrain_lock:
+                _retrain_status.update(
+                    running=False,
+                    progress="failed",
+                    error=str(exc),
+                    reason=exc.reason,
+                    details=exc.details,
+                    correlation_id=correlation_id,
+                )
+            return JSONResponse(
+                status_code=200,
+                content=_failure_payload(
+                    correlation_id=correlation_id,
+                    reason=exc.reason,
+                    message=str(exc),
+                    details=exc.details,
+                ),
+            )
+        logger.exception("[cid=%s] Retrain failed", correlation_id)
         record_retrain("failed")
         capture_exception(exc)
         with _retrain_lock:
-            _retrain_status.update(running=False, progress="failed", error=str(exc))
-        logger.exception("Internal error in admin endpoint")
-        raise HTTPException(status_code=500, detail="Internal server error")
+            _retrain_status.update(
+                running=False,
+                progress="failed",
+                error=str(exc),
+                reason="internal_error",
+                details={"error_type": type(exc).__name__},
+                correlation_id=correlation_id,
+            )
+        return JSONResponse(
+            status_code=500,
+            content=_failure_payload(
+                correlation_id=correlation_id,
+                reason="internal_error",
+                message="Retrain failed due to an internal error.",
+                details={"error_type": type(exc).__name__},
+            ),
+        )
 
 
 @router.get("/metrics", response_class=PlainTextResponse)

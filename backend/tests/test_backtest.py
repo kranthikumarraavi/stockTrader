@@ -3,9 +3,11 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from backend.prediction_engine.backtest.backtester import Backtester, ExecutionConfig
 from backend.trading_engine.simulator import PaperSimulator, OrderIntent
+from backend.api.routers.backtest import _build_execution_predictions
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +59,47 @@ def test_backtester_metrics():
     result = bt.run(predictions, prices)
 
     assert result.sharpe_ratio is not None or result.max_drawdown_pct is not None
+
+
+def test_build_execution_predictions_shifts_to_next_bar():
+    features_df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(
+                ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-01", "2026-01-02"]
+            ),
+            "ticker": ["AAA", "AAA", "AAA", "BBB", "BBB"],
+            "atr_14": [1.1, 1.2, 1.3, 0.9, 1.0],
+            "volatility_20": [0.2, 0.21, 0.22, 0.18, 0.19],
+        }
+    )
+    preds_raw = [
+        {"action": "buy", "confidence": 0.8},
+        {"action": "hold", "confidence": 0.5},
+        {"action": "sell", "confidence": 0.7},
+        {"action": "buy", "confidence": 0.75},
+        {"action": "sell", "confidence": 0.65},
+    ]
+
+    shifted = _build_execution_predictions(features_df, preds_raw)
+
+    # One row dropped per ticker due to next-bar execution mapping.
+    assert len(shifted) == len(features_df) - features_df["ticker"].nunique()
+    assert (shifted["date"] > shifted["signal_date"]).all()
+
+    aaa_rows = shifted[shifted["ticker"] == "AAA"].sort_values("signal_date")
+    assert list(aaa_rows["signal_date"].dt.strftime("%Y-%m-%d")) == ["2026-01-01", "2026-01-02"]
+    assert list(aaa_rows["date"].dt.strftime("%Y-%m-%d")) == ["2026-01-02", "2026-01-03"]
+
+
+def test_build_execution_predictions_rejects_length_mismatch():
+    features_df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-01-01", "2026-01-02"]),
+            "ticker": ["AAA", "AAA"],
+        }
+    )
+    with pytest.raises(ValueError):
+        _build_execution_predictions(features_df, [{"action": "buy", "confidence": 0.8}])
 
 
 # ---------------------------------------------------------------------------

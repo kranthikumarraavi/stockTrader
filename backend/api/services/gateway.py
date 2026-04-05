@@ -36,7 +36,8 @@ def _normalize_service_url(raw_value: str | None, fallback: str) -> str:
     """
     value = (raw_value or "").strip() or fallback
     parsed = urlparse(value)
-    if parsed.scheme:
+    # urlparse("host:10000") incorrectly treats "host" as scheme. Accept only real schemes.
+    if parsed.scheme in {"http", "https", "ws", "wss"}:
         return value.rstrip("/")
 
     if value.startswith("//"):

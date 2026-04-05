@@ -28,9 +28,7 @@ from backend.prediction_engine.feature_store.feature_store import (
 )
 from backend.prediction_engine.training.trainer import NUMERIC_FEATURES
 from backend.services.model_manager import ModelManager
-from backend.services.data_downloader import download_symbol, _yf_ticker
-
-import yfinance as yf
+from backend.prediction_engine.data_pipeline.connector_yahoo import YahooConnector
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +39,45 @@ STORAGE_RAW = Path(__file__).resolve().parents[3] / "storage" / "raw"
 # In-memory job store (thread-safe; use Celery + DB in production)
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
+
+
+def _build_execution_predictions(
+    features_df: pd.DataFrame,
+    preds_raw: list[dict],
+) -> pd.DataFrame:
+    """Build backtest prediction rows with strict T -> T+1 execution timing.
+
+    Signals are computed from features at `signal_date` and executed on the
+    next available bar date for the same ticker to prevent lookahead bias.
+    """
+    if len(preds_raw) != len(features_df):
+        raise ValueError(
+            f"Prediction length mismatch: preds={len(preds_raw)} rows, "
+            f"features={len(features_df)} rows"
+        )
+
+    passthrough_cols = [
+        "atr_14",
+        "volatility_20",
+        "momentum_10",
+        "ema_crossover",
+        "adx_14",
+        "rsi_14",
+        "distance_sma50",
+    ]
+    available_passthrough = [c for c in passthrough_cols if c in features_df.columns]
+
+    # Build one aligned frame first so action/confidence/features stay row-consistent.
+    predictions_df = features_df[["date", "ticker", *available_passthrough]].copy()
+    predictions_df["action"] = [p.get("action", "hold") for p in preds_raw]
+    predictions_df["confidence"] = [float(p.get("confidence", 0.5)) for p in preds_raw]
+
+    # Strict anti-lookahead: signal computed at T executes at next trading date T+1.
+    predictions_df = predictions_df.sort_values(["ticker", "date"]).reset_index(drop=True)
+    predictions_df["signal_date"] = predictions_df["date"]
+    predictions_df["date"] = predictions_df.groupby("ticker")["date"].shift(-1)
+    predictions_df = predictions_df.dropna(subset=["date"]).reset_index(drop=True)
+    return predictions_df
 
 
 def _ensure_backtest_data(
@@ -62,6 +99,8 @@ def _ensure_backtest_data(
         pd.Timestamp(start_date) - pd.DateOffset(days=400)
     ).strftime("%Y-%m-%d")
 
+    connector = YahooConnector(max_retries=4, retry_delay_s=1.5)
+
     for ticker in tickers:
         src = STORAGE_RAW / f"{ticker}.csv"
         dst = work_dir / f"{ticker}.csv"
@@ -81,18 +120,11 @@ def _ensure_backtest_data(
 
         # Download fresh data covering the full range
         logger.info("Backtest: downloading %s for %s → %s", ticker, lookback_start, end_date)
-        ticker_str = _yf_ticker(ticker)
         try:
-            t = yf.Ticker(ticker_str)
-            raw = t.history(start=lookback_start, end=end_date)
+            raw = connector.fetch(ticker, lookback_start, end_date)
             if raw is None or raw.empty:
                 logger.warning("Backtest: no data returned for %s", ticker)
                 continue
-            raw = raw.reset_index()
-            if "Datetime" in raw.columns:
-                raw = raw.rename(columns={"Datetime": "Date"})
-            if "Date" not in raw.columns:
-                raw = raw.rename(columns={raw.columns[0]: "Date"})
             raw["Date"] = pd.to_datetime(raw["Date"]).dt.tz_localize(None)
             keep = [c for c in ["Date", "Open", "High", "Low", "Close", "Volume"] if c in raw.columns]
             raw = raw[keep].dropna(subset=["Close"])
@@ -144,18 +176,7 @@ def _run_backtest_job(job_id: str, req_data: dict) -> None:
 
         preds_raw = model.predict_with_expected_return(X)
 
-        predictions_df = pd.DataFrame({
-            "date": features_df["date"].values,
-            "ticker": features_df["ticker"].values,
-            "action": [p["action"] for p in preds_raw],
-            "confidence": [p["confidence"] for p in preds_raw],
-        })
-
-        # Pass through feature columns needed by the strategy engine
-        for col in ("atr_14", "volatility_20", "momentum_10", "ema_crossover",
-                     "adx_14", "rsi_14", "distance_sma50"):
-            if col in features_df.columns:
-                predictions_df[col] = features_df[col].values
+        predictions_df = _build_execution_predictions(features_df, preds_raw)
 
         # 4. Build price DataFrame from work directory CSVs
         price_frames = []

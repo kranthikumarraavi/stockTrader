@@ -1,64 +1,57 @@
-# Yahoo Finance connector
-"""Yahoo Finance data connector using yfinance.
-
-Provides OHLCV data for NSE tickers by appending the `.NS` suffix
-expected by Yahoo Finance.
-"""
+"""Yahoo connector facade backed by resilient provider chain."""
 
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from backend.prediction_engine.data_pipeline.providers import (
+    ProviderChain,
+    ProviderConfig,
+    create_default_provider_chain,
+)
 
-try:
-    import yfinance as yf
-except ImportError:
-    yf = None
-    logger.warning("yfinance not installed â€“ YahooConnector will not work")
+logger = logging.getLogger(__name__)
 
 
 class YahooConnector:
-    """Fetches OHLCV data from Yahoo Finance."""
+    """Backward-compatible connector API used across the codebase."""
 
     REQUIRED_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
-    SYMBOL_OVERRIDES = {
-        "BAJAJ_AUTO": "BAJAJ-AUTO",
-        "M_M": "M&M",
-    }
 
-    def __init__(self, nse_suffix: str = ".NS", max_retries: int = 3, retry_delay_s: float = 1.0) -> None:
-        self._suffix = nse_suffix
-        self._max_retries = max(1, int(max_retries))
-        self._retry_delay_s = max(0.1, float(retry_delay_s))
+    def __init__(
+        self,
+        nse_suffix: str = ".NS",
+        max_retries: int = 3,
+        retry_delay_s: float = 1.0,
+        provider_chain: ProviderChain | None = None,
+    ) -> None:
+        # Keep constructor args for compatibility with existing call-sites.
+        if provider_chain is not None:
+            self._providers = provider_chain
+            return
 
-    def _yahoo_ticker(self, ticker: str) -> str:
-        """Append exchange suffix if not already present."""
-        if ticker.startswith("^"):
-            return ticker
-
-        base = ticker
-        if base.endswith(self._suffix):
-            base = base[: -len(self._suffix)]
-
-        if "." in base:
-            return ticker
-
-        base = self.SYMBOL_OVERRIDES.get(base, base)
-        if "_" in base:
-            parts = [p for p in base.split("_") if p]
-            if parts:
-                if all(len(p) == 1 for p in parts):
-                    base = "&".join(parts)
-                else:
-                    base = "-".join(parts)
-
-        return f"{base}{self._suffix}"
+        # Use defaults from env but allow caller overrides for retry/backoff.
+        chain = create_default_provider_chain()
+        if max_retries > 0 or retry_delay_s > 0:
+            # Rebuild with explicit override so existing callers still influence behavior.
+            from backend.prediction_engine.data_pipeline.providers import (
+                YahooMarketDataProvider,
+                KiteProviderStub,
+                DEFAULT_CACHE_DIR,
+            )
+            cfg = ProviderConfig(
+                max_retries=max(1, int(max_retries)),
+                backoff_base_s=max(0.1, float(retry_delay_s)),
+            )
+            self._providers = ProviderChain(
+                [YahooMarketDataProvider(config=cfg, cache_dir=DEFAULT_CACHE_DIR), KiteProviderStub()]
+            )
+        else:
+            self._providers = chain
 
     def fetch(
         self,
@@ -66,63 +59,12 @@ class YahooConnector:
         start: str | datetime,
         end: str | datetime,
     ) -> pd.DataFrame:
-        """Download OHLCV data for a single ticker.
-
-        Parameters
-        ----------
-        ticker : str
-            NSE ticker symbol (e.g. ``RELIANCE``).
-        start, end : str or datetime
-            Date range (inclusive).
-
-        Returns
-        -------
-        pd.DataFrame
-            DataFrame with columns Date, Open, High, Low, Close, Volume.
-        """
-        if yf is None:
-            raise RuntimeError("yfinance is not installed")
-
-        yahoo_sym = self._yahoo_ticker(ticker)
-        logger.info("Fetching %s (%s) from %s to %s", ticker, yahoo_sym, start, end)
-
-        # yfinance expects date strings in YYYY-MM-DD format, not full datetime
-        start_str = start.strftime("%Y-%m-%d") if hasattr(start, 'strftime') else str(start)[:10]
-        end_str = end.strftime("%Y-%m-%d") if hasattr(end, 'strftime') else str(end)[:10]
-        df = pd.DataFrame()
-        for attempt in range(1, self._max_retries + 1):
-            df = yf.download(
-                yahoo_sym,
-                start=start_str,
-                end=end_str,
-                progress=False,
-                auto_adjust=False,
-                threads=False,
-            )
-            if not df.empty:
-                break
-            if attempt < self._max_retries:
-                wait_s = self._retry_delay_s * attempt
-                logger.warning(
-                    "No data returned for %s on attempt %d/%d, retrying in %.1fs",
-                    ticker,
-                    attempt,
-                    self._max_retries,
-                    wait_s,
-                )
-                time.sleep(wait_s)
-
-        if df.empty:
+        """Download OHLCV data for a single ticker."""
+        df = self._providers.get_historical_bars(ticker, start, end, interval="1d")
+        if df is None or df.empty:
             logger.warning("No data returned for %s", ticker)
             return pd.DataFrame(columns=["Date"] + self.REQUIRED_COLUMNS)
-
-        # Flatten MultiIndex columns if present
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-        df = df.reset_index()
-        df = df.rename(columns={"index": "Date"} if "Date" not in df.columns else {})
-        return df[["Date"] + self.REQUIRED_COLUMNS]
+        return df[["Date"] + self.REQUIRED_COLUMNS].copy()
 
     def fetch_to_csv(
         self,
@@ -131,14 +73,11 @@ class YahooConnector:
         end: str | datetime,
         output_dir: str | Path,
     ) -> Path:
-        """Fetch data and persist as CSV.
-
-        Returns the path of the written file.
-        """
+        """Fetch data and persist as CSV."""
         df = self.fetch(ticker, start, end)
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         path = output_dir / f"{ticker}.csv"
         df.to_csv(path, index=False)
-        logger.info("Saved %d rows â†’ %s", len(df), path)
+        logger.info("Saved %d rows -> %s", len(df), path)
         return path

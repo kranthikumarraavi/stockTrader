@@ -1,0 +1,37 @@
+@use '../../variables' as *;
+
+.nf {
+  min-height: calc(100vh - 56px);
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+
+  &__card {
+    width: min(520px, 100%);
+    padding: 2rem 1.5rem;
+    text-align: center;
+    border-radius: $border-radius-lg;
+  }
+
+  &__icon {
+    width: 3rem;
+    height: 3rem;
+    margin: 0 auto 0.75rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: rgba($primary, 0.12);
+    color: $primary;
+    font-size: 1.3rem;
+  }
+
+  &__title {
+    font-size: 1.7rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+  }
+
+  &__subtitle {
+    margin: 0 0 1rem;
+  }
+}

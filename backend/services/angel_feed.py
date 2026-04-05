@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 ANGEL_API_KEY = os.getenv("ANGEL_API_KEY", "")
 ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID", "")
-ANGEL_MPIN = os.getenv("ANGEL_MPIN", "")
+ANGEL_MPIN = os.getenv("ANGEL_MPIN", "") or os.getenv("ANGEL_CLIENT_PIN", "")
 ANGEL_TOTP_SECRET = os.getenv("ANGEL_TOTP_SECRET", "")
 
 TOKEN_CACHE = Path(

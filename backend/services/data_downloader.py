@@ -10,7 +10,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-import yfinance as yf
+
+from backend.prediction_engine.data_pipeline.connector_yahoo import YahooConnector
+from backend.prediction_engine.data_pipeline.providers import SymbolMapper, ProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -35,21 +37,8 @@ STALE_HOURS = 18   # re-download if CSV is older than 18 hours
 
 def _yf_ticker(symbol: str) -> str:
     """Convert internal symbol name to yfinance ticker."""
-    if symbol in _YF_INDEX_MAP:
-        return _YF_INDEX_MAP[symbol]
-
-    clean = _YF_SYMBOL_OVERRIDES.get(symbol, symbol)
-    if "_" in clean:
-        parts = [p for p in clean.split("_") if p]
-        if parts:
-            if all(len(p) == 1 for p in parts):
-                clean = "&".join(parts)
-            else:
-                clean = "-".join(parts)
-
-    if clean.endswith(".NS") or clean.endswith(".BO"):
-        return clean
-    return f"{clean}.NS"
+    mapper = SymbolMapper()
+    return mapper.to_yahoo(symbol)
 
 
 def _is_stale(csv_path: Path, max_age_hours: float = STALE_HOURS) -> bool:
@@ -70,27 +59,18 @@ def download_symbol(symbol: str, data_dir: Path = STORAGE_DIR, period_years: int
 
     ticker_str = _yf_ticker(symbol)
     try:
-        ticker = yf.Ticker(ticker_str)
         end = datetime.now()
         start = end - timedelta(days=period_years * 365)
-        df = ticker.history(
+        connector = YahooConnector(max_retries=4, retry_delay_s=1.5)
+        df = connector.fetch(
+            symbol,
             start=start.strftime("%Y-%m-%d"),
             end=end.strftime("%Y-%m-%d"),
-            auto_adjust=False,
         )
 
         if df is None or df.empty:
             logger.warning("No data returned for %s (%s)", symbol, ticker_str)
             return False
-
-        # Normalize columns to match expected format: Date, Open, High, Low, Close, Volume
-        df = df.reset_index()
-        # yfinance returns 'Date' or 'Datetime' column
-        if "Datetime" in df.columns:
-            df = df.rename(columns={"Datetime": "Date"})
-        if "Date" not in df.columns:
-            # Try the index name
-            df = df.rename(columns={df.columns[0]: "Date"})
 
         # Strip timezone info for consistency
         df["Date"] = pd.to_datetime(df["Date"]).dt.tz_localize(None)
@@ -111,6 +91,9 @@ def download_symbol(symbol: str, data_dir: Path = STORAGE_DIR, period_years: int
         logger.info("Downloaded %d rows for %s -> %s", len(df), symbol, csv_path)
         return True
 
+    except ProviderError as e:
+        logger.error("Provider error downloading %s (%s): %s | details=%s", symbol, ticker_str, e, e.details)
+        return False
     except Exception as e:
         logger.error("Failed to download %s (%s): %s", symbol, ticker_str, e)
         return False

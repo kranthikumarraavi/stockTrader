@@ -1,0 +1,203 @@
+@use '../../variables' as *;
+
+.rp {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i {
+      color: $info;
+      font-size: 1.15rem;
+    }
+  }
+
+  &__subtitle {
+    font-size: 0.8125rem;
+    margin: 0.125rem 0 0;
+  }
+
+  &__section {
+    padding: 1rem;
+  }
+
+  &__section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+
+  &__section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    i {
+      color: $secondary;
+      font-size: 1rem;
+    }
+  }
+
+  &__filters {
+    max-width: 640px;
+    margin-bottom: 0.75rem;
+  }
+
+  &__heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+
+  &__heatmap-card {
+    border: 1px solid $border-color;
+    border-radius: $border-radius;
+    background: $card-bg;
+    padding: 0.75rem;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+
+  &__heatmap-card:hover {
+    background: rgba($primary, 0.03);
+  }
+
+  &__symbol {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+  }
+
+  &__regime {
+    font-weight: 600;
+    margin-bottom: 0.125rem;
+  }
+
+  &__confidence {
+    font-size: 0.78rem;
+    color: $secondary;
+  }
+
+  &__volatility {
+    font-size: 0.75rem;
+    color: $secondary;
+    margin-top: 0.35rem;
+    font-family: $font-family-monospace;
+  }
+
+  &__detail-input {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  &__detail {
+    border: 1px solid $border-color;
+    border-radius: $border-radius;
+    background: rgba($primary, 0.02);
+    padding: 0.75rem;
+  }
+
+  &__detail-header {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    margin-bottom: 0.75rem;
+  }
+
+  &__stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+  }
+
+  &__stat-card {
+    background: $card-bg;
+    border: 1px solid $border-color;
+    border-radius: $border-radius;
+    padding: 0.75rem;
+  }
+
+  &__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.22rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid $border-color;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  &__strategy {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.12rem 0.55rem;
+    border-radius: 999px;
+    background: rgba($info, 0.15);
+    color: darken($info, 10%);
+    font-size: 0.73rem;
+    font-weight: 600;
+  }
+
+  &__regime--trending-up,
+  &__regime--bullish,
+  &__regime--uptrend {
+    border-color: rgba($success, 0.45);
+    color: darken($success, 10%);
+    background: rgba($success, 0.08);
+  }
+
+  &__regime--trending-down,
+  &__regime--bearish,
+  &__regime--downtrend {
+    border-color: rgba($danger, 0.45);
+    color: darken($danger, 8%);
+    background: rgba($danger, 0.08);
+  }
+
+  &__regime--high-vol,
+  &__regime--volatile {
+    border-color: rgba($warning, 0.45);
+    color: darken($warning, 14%);
+    background: rgba($warning, 0.1);
+  }
+
+  &__regime--crash {
+    border-color: rgba($danger, 0.5);
+    color: darken($danger, 10%);
+    background: rgba($danger, 0.12);
+  }
+
+  &__regime--range-bound,
+  &__regime--sideways {
+    border-color: rgba($info, 0.45);
+    color: darken($info, 8%);
+    background: rgba($info, 0.09);
+  }
+}
+
+@media (max-width: 768px) {
+  .rp__detail-input {
+    grid-template-columns: 1fr;
+  }
+}
