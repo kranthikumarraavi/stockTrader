@@ -67,7 +67,71 @@
       },
       "artifact_path": "models\\artifacts\\v20260403.202030",
       "tickers_count": 48
+    },
+    {
+      "version": "v20260405.104250",
+      "timestamp": "2026-04-05T10:42:50.240071+00:00Z",
+      "seed": 42,
+      "horizon": 1,
+      "metrics": {
+        "accuracy": 0.5736137667304015,
+        "best_iteration": 7,
+        "test_accuracy": 0.5714285714285714,
+        "test_f1": 0.0,
+        "test_precision": 0.0,
+        "test_recall": 0.0,
+        "optimal_threshold": 0.5100000000000001
+      },
+      "artifact_path": "models\\artifacts\\v20260405.104250",
+      "tickers_count": 3,
+      "feature_schema_hash": "f0494121647b40ace90a7f91fed389a4a59e54b875b0bde05845861f277d0e4c",
+      "train_range": {
+        "start": "2025-02-19",
+        "end": "2025-12-02"
+      },
+      "val_range": {
+        "start": "2025-12-17",
+        "end": "2026-01-30"
+      },
+      "test_range": {
+        "start": "2026-02-16",
+        "end": "2026-04-01"
+      },
+      "symbols_used": [
+        "INFY",
+        "RELIANCE",
+        "TCS"
+      ],
+      "symbols_skipped": [],
+      "data_quality": {
+        "unique_dates": 272,
+        "rows": 746,
+        "class_counts": {
+          "0": 390,
+          "1": 356
+        },
+        "download_report": {
+          "requested": 3,
+          "missing": [],
+          "undersized": [],
+          "downloaded": [],
+          "skipped": {},
+          "raw_row_threshold": 460,
+          "lookback_days": 730,
+          "extended_lookback_days": 1460,
+          "available": [
+            "RELIANCE",
+            "TCS",
+            "INFY"
+          ],
+          "raw_rows_available": {
+            "RELIANCE": 494,
+            "TCS": 494,
+            "INFY": 494
+          }
+        }
+      }
     }
   ],
-  "latest": "v20260403.202030"
+  "latest": "v20260405.104250"
 }

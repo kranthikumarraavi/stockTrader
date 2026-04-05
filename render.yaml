@@ -181,7 +181,17 @@ services:
       - key: TRAIN_DOWNLOAD_PROVIDER_RETRIES
         value: "2"
       - key: TRAIN_DOWNLOAD_OUTER_RETRIES
-        value: "1"
+        value: "2"
+      - key: TRAIN_DOWNLOAD_LOOKBACK_DAYS
+        value: "1095"
+      - key: TRAIN_DOWNLOAD_EXTENDED_LOOKBACK_DAYS
+        value: "1825"
+      - key: TRAIN_DOWNLOAD_MIN_RAW_ROWS
+        value: "420"
+      - key: TRAIN_DOWNLOAD_TARGET_SYMBOLS
+        value: "8"
+      - key: TRAIN_DOWNLOAD_REQUEST_PAUSE_S
+        value: "1.0"
       - key: YF_REQUESTS_PER_SECOND
         value: "0.2"
       - key: YF_MAX_RETRIES
@@ -279,7 +289,17 @@ services:
       - key: TRAIN_DOWNLOAD_PROVIDER_RETRIES
         value: "2"
       - key: TRAIN_DOWNLOAD_OUTER_RETRIES
-        value: "1"
+        value: "2"
+      - key: TRAIN_DOWNLOAD_LOOKBACK_DAYS
+        value: "1095"
+      - key: TRAIN_DOWNLOAD_EXTENDED_LOOKBACK_DAYS
+        value: "1825"
+      - key: TRAIN_DOWNLOAD_MIN_RAW_ROWS
+        value: "420"
+      - key: TRAIN_DOWNLOAD_TARGET_SYMBOLS
+        value: "8"
+      - key: TRAIN_DOWNLOAD_REQUEST_PAUSE_S
+        value: "1.0"
     healthCheckPath: /api/v1/health
 
 databases:

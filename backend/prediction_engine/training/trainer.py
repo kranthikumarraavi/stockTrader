@@ -104,59 +104,142 @@ def _ensure_data_available(
     tickers: list[str],
     data_dir: Path,
     *,
+    config: TrainingConfig | None = None,
     return_report: bool = False,
 ) -> list[str] | tuple[list[str], dict]:
-    """Check if CSV data exists for tickers; download missing ones via yfinance.
-
-    Returns the list of tickers that have data available.
-    """
+    """Ensure raw CSV history is sufficient for feature generation + safe splits."""
     data_dir.mkdir(parents=True, exist_ok=True)
-    existing = {p.stem for p in data_dir.glob("*.csv")}
-    missing = list(dict.fromkeys(t for t in tickers if t not in existing))
+    cfg = config or load_training_config()
+
+    feature_warmup_rows = int(os.getenv("TRAIN_FEATURE_WARMUP_ROWS", "260"))
+    min_feature_rows = max(
+        cfg.min_rows_per_symbol,
+        cfg.train_min_days + cfg.val_min_days + cfg.test_min_days + 2 * cfg.purge_gap_days,
+    )
+    min_raw_rows = int(
+        os.getenv(
+            "TRAIN_DOWNLOAD_MIN_RAW_ROWS",
+            str(max(260, min_feature_rows + feature_warmup_rows)),
+        )
+    )
+
+    lookback_days = int(
+        os.getenv(
+            "TRAIN_DOWNLOAD_LOOKBACK_DAYS",
+            os.getenv("TRAIN_LOOKBACK_DAYS", "730"),
+        )
+    )
+    lookback_days = max(365, lookback_days)
+    extended_lookback_days = int(
+        os.getenv(
+            "TRAIN_DOWNLOAD_EXTENDED_LOOKBACK_DAYS",
+            str(max(lookback_days * 2, 1460)),
+        )
+    )
+    extended_lookback_days = max(lookback_days, extended_lookback_days)
+    download_target_symbols = int(
+        os.getenv(
+            "TRAIN_DOWNLOAD_TARGET_SYMBOLS",
+            str(max(cfg.min_symbols + 2, cfg.min_symbols)),
+        )
+    )
+    request_pause_s = float(os.getenv("TRAIN_DOWNLOAD_REQUEST_PAUSE_S", "0.6"))
+
+    def _row_count(path: Path) -> int:
+        if not path.exists():
+            return 0
+        try:
+            return int(len(pd.read_csv(path, usecols=["Date"])))
+        except Exception:
+            try:
+                return int(len(pd.read_csv(path)))
+            except Exception:
+                return 0
+
+    existing_rows: dict[str, int] = {
+        ticker: _row_count(data_dir / f"{ticker}.csv")
+        for ticker in tickers
+    }
+    missing = [t for t in tickers if existing_rows.get(t, 0) == 0]
+    undersized = [t for t in tickers if 0 < existing_rows.get(t, 0) < min_raw_rows]
+    needs_refresh = list(dict.fromkeys(missing + undersized))
 
     report: dict[str, object] = {
         "requested": len(tickers),
         "missing": missing,
+        "undersized": undersized,
         "downloaded": [],
         "skipped": {},
+        "raw_row_threshold": min_raw_rows,
+        "lookback_days": lookback_days,
+        "extended_lookback_days": extended_lookback_days,
     }
 
-    if not missing:
+    if not needs_refresh:
+        strict_available = [t for t in tickers if existing_rows.get(t, 0) >= min_raw_rows]
+        if not strict_available:
+            strict_available = [t for t in tickers if existing_rows.get(t, 0) > 0]
+        report["available"] = strict_available
+        report["raw_rows_available"] = {t: int(existing_rows.get(t, 0)) for t in strict_available}
         if return_report:
-            report["available"] = tickers
-            return tickers, report
-        return tickers
+            return strict_available, report
+        return strict_available
 
-    logger.info("Downloading data for %d missing tickers...", len(missing))
+    logger.info(
+        "Refreshing data for %d tickers (missing=%d, undersized=%d, min_raw_rows=%d)",
+        len(needs_refresh),
+        len(missing),
+        len(undersized),
+        min_raw_rows,
+    )
     try:
         from backend.prediction_engine.data_pipeline.connector_yahoo import YahooConnector
+
         connector = YahooConnector(
             max_retries=int(os.getenv("TRAIN_DOWNLOAD_PROVIDER_RETRIES", "2")),
             retry_delay_s=float(os.getenv("TRAIN_DOWNLOAD_RETRY_DELAY_S", "1.5")),
         )
         outer_retries = max(1, int(os.getenv("TRAIN_DOWNLOAD_OUTER_RETRIES", "1")))
         outer_backoff_s = float(os.getenv("TRAIN_DOWNLOAD_OUTER_BACKOFF_S", "2.0"))
-        end = datetime.now()
-        start_date = end - timedelta(days=365)
+        end_ts = datetime.now()
 
         downloaded = 0
-        for ticker in missing:
+        for ticker in needs_refresh:
             success = False
             for attempt in range(1, outer_retries + 1):
                 try:
-                    path = connector.fetch_to_csv(ticker, start_date, end, data_dir)
-                    # Validate the downloaded file has enough rows
-                    df = pd.read_csv(path)
-                    if len(df) >= 50:
+                    window_days_options = [lookback_days]
+                    if extended_lookback_days > lookback_days:
+                        window_days_options.append(extended_lookback_days)
+
+                    last_df: pd.DataFrame | None = None
+                    for window_days in window_days_options:
+                        start_ts = end_ts - timedelta(days=window_days)
+                        df = connector.fetch(ticker, start_ts, end_ts)
+                        last_df = df
+                        if len(df) >= min_raw_rows:
+                            break
+                        logger.warning(
+                            "Downloaded %s but only %d rows (required >= %d) using %d-day lookback",
+                            ticker,
+                            len(df),
+                            min_raw_rows,
+                            window_days,
+                        )
+
+                    if last_df is not None and len(last_df) >= min_raw_rows:
+                        path = data_dir / f"{ticker}.csv"
+                        last_df.to_csv(path, index=False)
+                        existing_rows[ticker] = int(len(last_df))
                         downloaded += 1
                         success = True
                         report["downloaded"].append(ticker)
-                        logger.info("Downloaded %s (%d rows)", ticker, len(df))
+                        logger.info("Downloaded %s (%d rows)", ticker, len(last_df))
                         break
 
-                    logger.warning("Skipping %s - only %d rows", ticker, len(df))
-                    report["skipped"][ticker] = f"insufficient_rows:{len(df)}"
-                    path.unlink(missing_ok=True)
+                    rows = int(len(last_df)) if last_df is not None else 0
+                    logger.warning("Skipping %s - only %d rows (required >= %d)", ticker, rows, min_raw_rows)
+                    report["skipped"][ticker] = f"insufficient_rows:{rows}"
                 except Exception as exc:
                     logger.warning(
                         "Failed to download %s on attempt %d/%d: %s",
@@ -176,19 +259,32 @@ def _ensure_data_available(
                 logger.warning("Unable to fetch usable data for %s after retries", ticker)
                 report["skipped"].setdefault(ticker, "retry_exhausted")
 
-            # Pace requests to reduce provider-side throttling.
-            time.sleep(0.4)
+            if request_pause_s > 0:
+                time.sleep(request_pause_s)
 
-        logger.info("Downloaded %d/%d missing tickers", downloaded, len(missing))
+            strong_count = sum(1 for rows in existing_rows.values() if rows >= min_raw_rows)
+            if strong_count >= max(cfg.min_symbols, download_target_symbols):
+                logger.info(
+                    "Reached strong-data target (%d symbols with >= %d rows), stopping refresh loop",
+                    strong_count,
+                    min_raw_rows,
+                )
+                break
+
+        logger.info("Downloaded %d/%d required tickers", downloaded, len(needs_refresh))
     except ImportError:
         logger.error("yfinance not installed - cannot auto-download data")
-        for ticker in missing:
+        for ticker in needs_refresh:
             report["skipped"].setdefault(ticker, "yfinance_not_installed")
 
-    # Return only tickers that have CSV files
-    available = {p.stem for p in data_dir.glob("*.csv")}
-    available_tickers = [t for t in tickers if t in available]
+    available_tickers = [t for t in tickers if existing_rows.get(t, 0) >= min_raw_rows]
+    if len(available_tickers) < cfg.min_symbols:
+        fallback = [t for t in tickers if existing_rows.get(t, 0) > 0]
+        if fallback:
+            available_tickers = fallback
+
     report["available"] = available_tickers
+    report["raw_rows_available"] = {t: int(existing_rows.get(t, 0)) for t in available_tickers}
     if return_report:
         return available_tickers, report
     return available_tickers
@@ -552,7 +648,12 @@ def train(
         ]
 
     # Auto-download data if missing
-    tickers, data_report = _ensure_data_available(tickers, data_dir, return_report=True)
+    tickers, data_report = _ensure_data_available(
+        tickers,
+        data_dir,
+        config=cfg,
+        return_report=True,
+    )
     if not tickers:
         raise TrainingPipelineError(
             reason="insufficient_data",
@@ -780,12 +881,14 @@ def train_hybrid(
     """
     np.random.seed(seed)
 
+    cfg = load_training_config()
+
     if tickers is None:
         ticker_file = REPO_ROOT / "scripts" / "sample_data" / "tickers.txt"
         tickers = [t.strip() for t in ticker_file.read_text().splitlines() if t.strip()]
 
     # Auto-download data if missing
-    tickers = _ensure_data_available(tickers, Path(data_dir))
+    tickers = _ensure_data_available(tickers, Path(data_dir), config=cfg)
     if not tickers:
         raise FileNotFoundError("No CSV data available for hybrid training.")
 
@@ -943,12 +1046,14 @@ def train_ensemble(
     """
     np.random.seed(seed)
 
+    cfg = load_training_config()
+
     if tickers is None:
         ticker_file = REPO_ROOT / "scripts" / "sample_data" / "tickers.txt"
         tickers = [t.strip() for t in ticker_file.read_text().splitlines() if t.strip()]
 
     # Auto-download data if missing
-    tickers = _ensure_data_available(tickers, Path(data_dir))
+    tickers = _ensure_data_available(tickers, Path(data_dir), config=cfg)
     if not tickers:
         raise FileNotFoundError("No CSV data available for ensemble training.")
 
