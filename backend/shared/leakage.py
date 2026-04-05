@@ -176,16 +176,25 @@ def verify_feature_timestamps(
             )
 
     # Forward-fill check: if corr(x, x.shift(-1)) > 0.95, suspicious
+    # Use finite-only samples and variance guards to avoid noisy numpy warnings
+    # from degenerate vectors (all-constant / inf-heavy columns).
     numeric_cols = features_df.select_dtypes(include=[np.number]).columns
     for col in numeric_cols:
-        series = features_df[col].dropna()
+        series = features_df[col].replace([np.inf, -np.inf], np.nan).dropna()
         if len(series) < 50:
             continue
-        shifted = series.shift(-1).dropna()
-        common = series.iloc[:len(shifted)]
-        if len(common) < 20:
+        shifted = series.shift(-1)
+        pair = pd.concat([series, shifted], axis=1).dropna()
+        if len(pair) < 20:
             continue
-        corr = np.corrcoef(common.values, shifted.values)[0, 1]
+        x = pair.iloc[:, 0]
+        y = pair.iloc[:, 1]
+        # Constant vectors do not have a meaningful correlation.
+        if float(x.std(ddof=0)) <= 1e-12 or float(y.std(ddof=0)) <= 1e-12:
+            continue
+        corr = float(x.corr(y))
+        if not np.isfinite(corr):
+            continue
         if abs(corr) > 0.98:
             logger.warning(
                 "Column '%s' has %.3f corr with 1-step-ahead shift — "
