@@ -25,7 +25,7 @@ services:
       - key: SERVICE_NAME
         value: gateway
       - key: ALLOWED_ORIGINS
-        value: "https://stockv3.vercel.app,http://localhost:3000,http://localhost:8000"
+        value: "https://stockv3.vercel.app,https://stocktrader-gateway-lyh3-4r84.onrender.com,http://localhost:3000,http://localhost:8000"
       - key: PAPER_MODE
         value: "true"
       - key: ANGEL_API_KEY
@@ -39,13 +39,13 @@ services:
       - key: LOG_LEVEL
         value: INFO
       - key: MARKET_DATA_URL
-        value: "https://stocktrader-market-data-lyh3.onrender.com"
+        value: "https://stocktrader-market-data-lyh3-aklj.onrender.com"
       - key: PREDICTION_URL
-        value: "https://stocktrader-prediction-lyh3.onrender.com"
+        value: "https://stocktrader-prediction-lyh3-dhxd.onrender.com"
       - key: TRADING_URL
-        value: "https://stocktrader-trading-lyh3.onrender.com"
+        value: "https://stocktrader-trading-lyh3-c87i.onrender.com"
       - key: ADMIN_URL
-        value: "https://stocktrader-admin-lyh3.onrender.com"
+        value: "https://stocktrader-admin-lyh3-2lam.onrender.com"
       - key: DATABASE_URL
         fromDatabase:
           name: stocktrader-db-lyh3
@@ -393,7 +393,7 @@ services:
       - key: MODEL_SYNC_TOKEN
         value: stocktrader-sync-v1
       - key: PREDICTION_URL
-        value: "https://stocktrader-prediction-lyh3.onrender.com"
+        value: "https://stocktrader-prediction-lyh3-dhxd.onrender.com"
       - key: TRAIN_DOWNLOAD_PROVIDER_RETRIES
         value: "2"
       - key: TRAIN_DOWNLOAD_OUTER_RETRIES
