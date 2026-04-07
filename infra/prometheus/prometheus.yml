@@ -1,0 +1,74 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Prometheus – StockTrader Service Discovery
+# ═══════════════════════════════════════════════════════════════════════
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "api-gateway"
+    static_configs:
+      - targets: ["api-gateway:8000"]
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  - job_name: "market-data"
+    static_configs:
+      - targets: ["market-data:8001"]
+    metrics_path: /metrics
+
+  - job_name: "prediction"
+    static_configs:
+      - targets: ["prediction:8002"]
+    metrics_path: /metrics
+
+  - job_name: "trading"
+    static_configs:
+      - targets: ["trading:8003"]
+    metrics_path: /metrics
+
+  - job_name: "portfolio-risk"
+    static_configs:
+      - targets: ["portfolio-risk:8004"]
+    metrics_path: /metrics
+
+  - job_name: "backtest"
+    static_configs:
+      - targets: ["backtest:8005"]
+    metrics_path: /metrics
+
+  - job_name: "model-management"
+    static_configs:
+      - targets: ["model-management:8006"]
+    metrics_path: /metrics
+
+  - job_name: "execution"
+    static_configs:
+      - targets: ["execution:8007"]
+    metrics_path: /metrics
+
+  - job_name: "options-signal"
+    static_configs:
+      - targets: ["options-signal:8008"]
+    metrics_path: /metrics
+
+  - job_name: "intraday-features"
+    static_configs:
+      - targets: ["intraday-features:8009"]
+    metrics_path: /metrics
+
+  - job_name: "intraday-prediction"
+    static_configs:
+      - targets: ["intraday-prediction:8010"]
+    metrics_path: /metrics
+
+  - job_name: "trade-supervisor"
+    static_configs:
+      - targets: ["trade-supervisor:8011"]
+    metrics_path: /metrics
+
+  # Infrastructure
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

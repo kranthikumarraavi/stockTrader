@@ -1,0 +1,373 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  StockTrader Microservices – Full Docker Compose
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  Usage:
+#    docker compose -f docker-compose.services.yml up -d           # start all
+#    docker compose -f docker-compose.services.yml up -d api-gateway  # one service
+#    docker compose -f docker-compose.services.yml logs -f market-data
+#    docker compose -f docker-compose.services.yml down
+#
+# ═══════════════════════════════════════════════════════════════════════
+
+x-service-common: &service-common
+  restart: unless-stopped
+  env_file: .env
+  networks:
+    - stocktrader
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Infrastructure
+  # ──────────────────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: stocktrader-postgres
+    environment:
+      POSTGRES_DB: stocktrader
+      POSTGRES_USER: ${POSTGRES_USER:-stocktrader}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stocktrader}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - stocktrader
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stocktrader}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: stocktrader-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - stocktrader
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: stocktrader-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - stocktrader
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Monitoring
+  # ──────────────────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: stocktrader-prometheus
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - stocktrader
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: stocktrader-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/services.json
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - stocktrader
+    depends_on:
+      - prometheus
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Frontend
+  # ──────────────────────────────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.frontend
+    container_name: stocktrader-frontend
+    ports:
+      - "4200:80"
+    networks:
+      - stocktrader
+    depends_on:
+      - api-gateway
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  API Gateway (port 8000)
+  # ──────────────────────────────────────────────────────────────────────
+
+  api-gateway:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/api-gateway/Dockerfile
+    container_name: stocktrader-api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      SERVICE_PORT: 8000
+      MARKET_DATA_URL: http://market-data:8001
+      PREDICTION_URL: http://prediction:8002
+      TRADING_URL: http://trading:8003
+      PORTFOLIO_RISK_URL: http://portfolio-risk:8004
+      BACKTEST_URL: http://backtest:8005
+      MODEL_MANAGEMENT_URL: http://model-management:8006
+      EXECUTION_URL: http://execution:8007
+      OPTIONS_SIGNAL_URL: http://options-signal:8008
+      INTRADAY_FEATURE_URL: http://intraday-features:8009
+      INTRADAY_PREDICTION_URL: http://intraday-prediction:8010
+      TRADE_SUPERVISOR_URL: http://trade-supervisor:8011
+    depends_on:
+      market-data:
+        condition: service_healthy
+      prediction:
+        condition: service_healthy
+      trading:
+        condition: service_healthy
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Market Data Service (port 8001)
+  # ──────────────────────────────────────────────────────────────────────
+
+  market-data:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/market-data-service/Dockerfile
+    container_name: stocktrader-market-data
+    ports:
+      - "8001:8001"
+    environment:
+      SERVICE_PORT: 8001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocktrader}:${POSTGRES_PASSWORD:-stocktrader}@postgres:5432/stocktrader
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./storage:/app/storage
+      - ./models:/app/models
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Prediction Service (port 8002)
+  # ──────────────────────────────────────────────────────────────────────
+
+  prediction:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/prediction-service/Dockerfile
+    container_name: stocktrader-prediction
+    ports:
+      - "8002:8002"
+    environment:
+      SERVICE_PORT: 8002
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocktrader}:${POSTGRES_PASSWORD:-stocktrader}@postgres:5432/stocktrader
+    volumes:
+      - ./storage:/app/storage
+      - ./models:/app/models
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Trading Service (port 8003)
+  # ──────────────────────────────────────────────────────────────────────
+
+  trading:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/trading-service/Dockerfile
+    container_name: stocktrader-trading
+    ports:
+      - "8003:8003"
+    environment:
+      SERVICE_PORT: 8003
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocktrader}:${POSTGRES_PASSWORD:-stocktrader}@postgres:5432/stocktrader
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Portfolio Risk Service (port 8004)
+  # ──────────────────────────────────────────────────────────────────────
+
+  portfolio-risk:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/portfolio-risk-service/Dockerfile
+    container_name: stocktrader-portfolio-risk
+    ports:
+      - "8004:8004"
+    environment:
+      SERVICE_PORT: 8004
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocktrader}:${POSTGRES_PASSWORD:-stocktrader}@postgres:5432/stocktrader
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Backtest Service (port 8005)
+  # ──────────────────────────────────────────────────────────────────────
+
+  backtest:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/backtest-service/Dockerfile
+    container_name: stocktrader-backtest
+    ports:
+      - "8005:8005"
+    environment:
+      SERVICE_PORT: 8005
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocktrader}:${POSTGRES_PASSWORD:-stocktrader}@postgres:5432/stocktrader
+    volumes:
+      - ./storage:/app/storage
+      - ./models:/app/models
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Model Management Service (port 8006)
+  # ──────────────────────────────────────────────────────────────────────
+
+  model-management:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/model-management-service/Dockerfile
+    container_name: stocktrader-model-management
+    ports:
+      - "8006:8006"
+    environment:
+      SERVICE_PORT: 8006
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocktrader}:${POSTGRES_PASSWORD:-stocktrader}@postgres:5432/stocktrader
+    volumes:
+      - ./storage:/app/storage
+      - ./models:/app/models
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Execution Service (port 8007)
+  # ──────────────────────────────────────────────────────────────────────
+
+  execution:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/execution-service/Dockerfile
+    container_name: stocktrader-execution
+    ports:
+      - "8007:8007"
+    environment:
+      SERVICE_PORT: 8007
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocktrader}:${POSTGRES_PASSWORD:-stocktrader}@postgres:5432/stocktrader
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Options Signal Service (port 8008)
+  # ──────────────────────────────────────────────────────────────────────
+
+  options-signal:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/options-signal-service/Dockerfile
+    container_name: stocktrader-options-signal
+    ports:
+      - "8008:8008"
+    environment:
+      SERVICE_PORT: 8008
+      DATABASE_URL: postgresql://${POSTGRES_USER:-stocktrader}:${POSTGRES_PASSWORD:-stocktrader}@postgres:5432/stocktrader
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Intraday Feature Service (port 8009)
+  # ──────────────────────────────────────────────────────────────────────
+
+  intraday-features:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/intraday-feature-service/Dockerfile
+    container_name: stocktrader-intraday-features
+    ports:
+      - "8009:8009"
+    environment:
+      SERVICE_PORT: 8009
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Intraday Prediction Service (port 8010)
+  # ──────────────────────────────────────────────────────────────────────
+
+  intraday-prediction:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/intraday-prediction-service/Dockerfile
+    container_name: stocktrader-intraday-prediction
+    ports:
+      - "8010:8010"
+    environment:
+      SERVICE_PORT: 8010
+    volumes:
+      - ./models:/app/models
+
+  # ──────────────────────────────────────────────────────────────────────
+  #  Trade Supervisor Service (port 8011)
+  # ──────────────────────────────────────────────────────────────────────
+
+  trade-supervisor:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: services/trade-supervisor-service/Dockerfile
+    container_name: stocktrader-trade-supervisor
+    ports:
+      - "8011:8011"
+    environment:
+      SERVICE_PORT: 8011
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+
+# ──────────────────────────────────────────────────────────────────────
+#  Volumes & Networks
+# ──────────────────────────────────────────────────────────────────────
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  stocktrader:
+    driver: bridge

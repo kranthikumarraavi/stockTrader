@@ -10,7 +10,9 @@ __pycache__/
 venv/
 
 # Environment
-
+.env
+.env.local
+.env.production
 
 # SQLite dev database
 *.db
@@ -50,7 +52,7 @@ frontend/.angular/
 frontend/coverage/
 
 # Logs
-logs/*.log
+logs/
 
 # Feature store manifest (auto-generated)
 backend/prediction_engine/feature_store/manifest.json
